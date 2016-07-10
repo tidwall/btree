@@ -61,6 +61,9 @@ type Item interface {
 	// This must provide a strict weak ordering.
 	// If !a.Less(b) && !b.Less(a), we treat this to mean a == b (i.e. we can only
 	// hold one of either a or b in the tree).
+	//
+	// There is a user-defined ctx argument that is equal to the ctx value which
+	// is set at time of the btree contruction.
 	Less(than Item, ctx int) bool
 }
 
