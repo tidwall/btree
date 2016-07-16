@@ -64,7 +64,7 @@ type Item interface {
 	//
 	// There is a user-defined ctx argument that is equal to the ctx value which
 	// is set at time of the btree contruction.
-	Less(than Item, ctx int) bool
+	Less(than Item, ctx interface{}) bool
 }
 
 const (
@@ -110,12 +110,12 @@ type ItemIterator func(i Item) bool
 // New(2), for example, will create a 2-3-4 tree (each node contains 1-3 items
 // and 2-4 children).
 // The ctx param is user-defined.
-func New(degree, ctx int) *BTree {
+func New(degree int, ctx interface{}) *BTree {
 	return NewWithFreeList(degree, NewFreeList(DefaultFreeListSize), ctx)
 }
 
 // NewWithFreeList creates a new B-Tree that uses the given node free list.
-func NewWithFreeList(degree int, f *FreeList, ctx int) *BTree {
+func NewWithFreeList(degree int, f *FreeList, ctx interface{}) *BTree {
 	if degree <= 1 {
 		panic("bad degree")
 	}
@@ -161,7 +161,7 @@ func (s *items) pop() (out Item) {
 // find returns the index where the given item should be inserted into this
 // list.  'found' is true if the item already exists in the list at the given
 // index.
-func (s items) find(item Item, ctx int) (index int, found bool) {
+func (s items) find(item Item, ctx interface{}) (index int, found bool) {
 	i := sort.Search(len(s), func(i int) bool {
 		return item.Less(s[i], ctx)
 	})
@@ -245,7 +245,7 @@ func (n *node) maybeSplitChild(i, maxItems int) bool {
 // insert inserts an item into the subtree rooted at this node, making sure
 // no nodes in the subtree exceed maxItems items.  Should an equivalent item be
 // be found/replaced by insert, it will be returned.
-func (n *node) insert(item Item, maxItems int, ctx int) Item {
+func (n *node) insert(item Item, maxItems int, ctx interface{}) Item {
 	i, found := n.items.find(item, ctx)
 	if found {
 		out := n.items[i]
@@ -273,7 +273,7 @@ func (n *node) insert(item Item, maxItems int, ctx int) Item {
 }
 
 // get finds the given key in the subtree and returns it.
-func (n *node) get(key Item, ctx int) Item {
+func (n *node) get(key Item, ctx interface{}) Item {
 	i, found := n.items.find(key, ctx)
 	if found {
 		return n.items[i]
@@ -321,7 +321,7 @@ const (
 )
 
 // remove removes an item from the subtree rooted at this node.
-func (n *node) remove(item Item, minItems int, typ toRemove, ctx int) Item {
+func (n *node) remove(item Item, minItems int, typ toRemove, ctx interface{}) Item {
 	var i int
 	var found bool
 	switch typ {
@@ -388,7 +388,7 @@ func (n *node) remove(item Item, minItems int, typ toRemove, ctx int) Item {
 // We then simply redo our remove call, and the second time (regardless of
 // whether we're in case 1 or 2), we'll have enough items and can guarantee
 // that we hit case A.
-func (n *node) growChildAndRemove(i int, item Item, minItems int, typ toRemove, ctx int) Item {
+func (n *node) growChildAndRemove(i int, item Item, minItems int, typ toRemove, ctx interface{}) Item {
 	child := n.children[i]
 	if i > 0 && len(n.children[i-1].items) > minItems {
 		// Steal from left child
@@ -438,7 +438,7 @@ const (
 // will force the iterator to include the first item when it equals 'start',
 // thus creating a "greaterOrEqual" or "lessThanEqual" rather than just a
 // "greaterThan" or "lessThan" queries.
-func (n *node) iterate(dir direction, start, stop Item, includeStart bool, hit bool, iter ItemIterator, ctx int) (bool, bool) {
+func (n *node) iterate(dir direction, start, stop Item, includeStart bool, hit bool, iter ItemIterator, ctx interface{}) (bool, bool) {
 	var ok bool
 	switch dir {
 	case ascend:
@@ -517,7 +517,7 @@ type BTree struct {
 	length   int
 	root     *node
 	freelist *FreeList
-	ctx      int
+	ctx      interface{}
 }
 
 // maxItems returns the max number of items to allow per node.
@@ -596,7 +596,7 @@ func (t *BTree) DeleteMax() Item {
 	return t.deleteItem(nil, removeMax, t.ctx)
 }
 
-func (t *BTree) deleteItem(item Item, typ toRemove, ctx int) Item {
+func (t *BTree) deleteItem(item Item, typ toRemove, ctx interface{}) Item {
 	if t.root == nil || len(t.root.items) == 0 {
 		return nil
 	}
@@ -717,6 +717,6 @@ func (t *BTree) Len() int {
 type Int int
 
 // Less returns true if int(a) < int(b).
-func (a Int) Less(b Item, ctx int) bool {
+func (a Int) Less(b Item, ctx interface{}) bool {
 	return a < b.(Int)
 }
