@@ -123,7 +123,7 @@ func TestBTree(t *testing.T) {
 }
 
 func ExampleBTree() {
-	tr := New(*btreeDegree, 0)
+	tr := New(*btreeDegree, nil)
 	for i := Int(0); i < 10; i++ {
 		tr.ReplaceOrInsert(i)
 	}
