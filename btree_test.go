@@ -25,7 +25,7 @@ import (
 
 func init() {
 	seed := time.Now().Unix()
-	fmt.Println(seed)
+	//fmt.Println(seed)
 	rand.Seed(seed)
 }
 
