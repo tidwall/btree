@@ -143,8 +143,8 @@ func (s *items) insertAt(index int, item Item) {
 // back.
 func (s *items) removeAt(index int) Item {
 	item := (*s)[index]
-	(*s)[index] = nil
 	copy((*s)[index:], (*s)[index+1:])
+	(*s)[len(*s)-1] = nil
 	*s = (*s)[:len(*s)-1]
 	return item
 }
@@ -188,8 +188,8 @@ func (s *children) insertAt(index int, n *node) {
 // back.
 func (s *children) removeAt(index int) *node {
 	n := (*s)[index]
-	(*s)[index] = nil
 	copy((*s)[index:], (*s)[index+1:])
+	(*s)[len(*s)-1] = nil
 	*s = (*s)[:len(*s)-1]
 	return n
 }
