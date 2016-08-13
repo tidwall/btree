@@ -47,12 +47,6 @@
 // support storing multiple equivalent values.
 package btree
 
-import (
-	"fmt"
-	"io"
-	"strings"
-)
-
 // Item represents a single object in the tree.
 type Item interface {
 	// Less tests whether the current item is less than the given argument.
@@ -500,14 +494,6 @@ func (n *node) iterate(dir direction, start, stop Item, includeStart bool, hit b
 		}
 	}
 	return hit, true
-}
-
-// Used for testing/debugging purposes.
-func (n *node) print(w io.Writer, level int) {
-	fmt.Fprintf(w, "%sNODE:%v\n", strings.Repeat("  ", level), n.items)
-	for _, c := range n.children {
-		c.print(w, level+1)
-	}
 }
 
 // BTree is an implementation of a B-Tree.
