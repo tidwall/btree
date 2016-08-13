@@ -60,9 +60,7 @@ type Item interface {
 	Less(than Item, ctx interface{}) bool
 }
 
-const (
-	DefaultFreeListSize = 32
-)
+const DefaultFreeListSize = 32
 
 // FreeList represents a free list of btree nodes. By default each
 // BTree has its own FreeList, but multiple BTrees can share the same
