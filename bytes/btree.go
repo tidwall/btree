@@ -112,11 +112,6 @@ func (f *FreeList) freeNode(n *node) {
 	f.mu.Unlock()
 }
 
-// Iterator allows callers of Ascend* to iterate in-order over portions of
-// the tree.  When this function returns false, iteration will stop and the
-// associated Ascend* function will immediately return.
-type Iterator func(key, value []byte) bool
-
 // New creates a new B-Tree with the given degree.
 //
 // New(2), for example, will create a 2-3-4 tree (each node contains 1-3 items
@@ -506,7 +501,7 @@ const (
 // will force the iterator to include the first item when it equals 'start',
 // thus creating a "greaterOrEqual" or "lessThanEqual" rather than just a
 // "greaterThan" or "lessThan" queries.
-func (n *node) iterate(dir direction, start, stop itemT, includeStart bool, hit bool, iter Iterator) (bool, bool) {
+func (n *node) iterate(dir direction, start, stop itemT, includeStart bool, hit bool, iter func(key, value []byte) bool) (bool, bool) {
 	var ok bool
 	switch dir {
 	case ascend:
@@ -727,7 +722,7 @@ func (t *BTree) deleteItem(item itemT, typ toRemove) itemT {
 
 // AscendRange calls the iterator for every value in the tree within the range
 // [greaterOrEqual, lessThan), until iterator returns false.
-func (t *BTree) AscendRange(greaterOrEqual, lessThan []byte, iterator Iterator) {
+func (t *BTree) AscendRange(greaterOrEqual, lessThan []byte, iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
@@ -736,7 +731,7 @@ func (t *BTree) AscendRange(greaterOrEqual, lessThan []byte, iterator Iterator) 
 
 // AscendLessThan calls the iterator for every value in the tree within the range
 // [first, pivot), until iterator returns false.
-func (t *BTree) AscendLessThan(pivot []byte, iterator Iterator) {
+func (t *BTree) AscendLessThan(pivot []byte, iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
@@ -745,7 +740,7 @@ func (t *BTree) AscendLessThan(pivot []byte, iterator Iterator) {
 
 // AscendGreaterOrEqual calls the iterator for every value in the tree within
 // the range [pivot, last], until iterator returns false.
-func (t *BTree) AscendGreaterOrEqual(pivot []byte, iterator Iterator) {
+func (t *BTree) AscendGreaterOrEqual(pivot []byte, iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
@@ -754,7 +749,7 @@ func (t *BTree) AscendGreaterOrEqual(pivot []byte, iterator Iterator) {
 
 // Ascend calls the iterator for every value in the tree within the range
 // [first, last], until iterator returns false.
-func (t *BTree) Ascend(iterator Iterator) {
+func (t *BTree) Ascend(iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
@@ -763,7 +758,7 @@ func (t *BTree) Ascend(iterator Iterator) {
 
 // DescendRange calls the iterator for every value in the tree within the range
 // [lessOrEqual, greaterThan), until iterator returns false.
-func (t *BTree) DescendRange(lessOrEqual, greaterThan []byte, iterator Iterator) {
+func (t *BTree) DescendRange(lessOrEqual, greaterThan []byte, iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
@@ -772,7 +767,7 @@ func (t *BTree) DescendRange(lessOrEqual, greaterThan []byte, iterator Iterator)
 
 // DescendLessOrEqual calls the iterator for every value in the tree within the range
 // [pivot, first], until iterator returns false.
-func (t *BTree) DescendLessOrEqual(pivot []byte, iterator Iterator) {
+func (t *BTree) DescendLessOrEqual(pivot []byte, iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
@@ -781,7 +776,7 @@ func (t *BTree) DescendLessOrEqual(pivot []byte, iterator Iterator) {
 
 // DescendGreaterThan calls the iterator for every value in the tree within
 // the range (pivot, last], until iterator returns false.
-func (t *BTree) DescendGreaterThan(pivot []byte, iterator Iterator) {
+func (t *BTree) DescendGreaterThan(pivot []byte, iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
@@ -790,7 +785,7 @@ func (t *BTree) DescendGreaterThan(pivot []byte, iterator Iterator) {
 
 // Descend calls the iterator for every value in the tree within the range
 // [last, first], until iterator returns false.
-func (t *BTree) Descend(iterator Iterator) {
+func (t *BTree) Descend(iterator func(key, value []byte) bool) {
 	if t.root == nil {
 		return
 	}
