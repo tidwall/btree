@@ -829,3 +829,140 @@ type Int int
 func (a Int) Less(b Item, ctx interface{}) bool {
 	return a < b.(Int)
 }
+
+type stackItem struct {
+	n *node // current node
+	i int   // index of the next child/item.
+}
+
+// Cursor represents an iterator that can traverse over all items in the tree
+// in sorted order.
+//
+// Changing data while traversing a cursor may result in unexpected items to
+// be returned. You must reposition your cursor after mutating data.
+type Cursor struct {
+	t     *BTree
+	stack []stackItem
+}
+
+// Cursor returns a new cursor used to traverse over items in the tree.
+func (t *BTree) Cursor() *Cursor {
+	return &Cursor{t: t}
+}
+
+// First moves the cursor to the first item in the tree and returns that item.
+func (c *Cursor) First() Item {
+	c.stack = c.stack[:0]
+	n := c.t.root
+	if n == nil {
+		return nil
+	}
+	c.stack = append(c.stack, stackItem{n: n})
+	for len(n.children) > 0 {
+		n = n.children[0]
+		c.stack = append(c.stack, stackItem{n: n})
+	}
+	if len(n.items) == 0 {
+		return nil
+	}
+	return n.items[0]
+}
+
+// Next moves the cursor to the next item and returns that item.
+func (c *Cursor) Next() Item {
+	if len(c.stack) == 0 {
+		return nil
+	}
+	si := len(c.stack) - 1
+	c.stack[si].i++
+	n := c.stack[si].n
+	i := c.stack[si].i
+	if i == len(n.children)+len(n.items) {
+		c.stack = c.stack[:len(c.stack)-1]
+		return c.Next()
+	}
+	if len(n.children) == 0 {
+		if i >= len(n.items) {
+			c.stack = c.stack[:len(c.stack)-1]
+			return c.Next()
+		}
+		return n.items[i]
+	} else if i%2 == 1 {
+		return n.items[i/2]
+	}
+	c.stack = append(c.stack, stackItem{n: n.children[i/2], i: -1})
+	return c.Next()
+
+}
+
+// Last moves the cursor to the last item in the tree and returns that item.
+func (c *Cursor) Last() Item {
+	c.stack = c.stack[:0]
+	n := c.t.root
+	if n == nil {
+		return nil
+	}
+	c.stack = append(c.stack, stackItem{n: n, i: len(n.children) + len(n.items) - 1})
+	for len(n.children) > 0 {
+		n = n.children[len(n.children)-1]
+		c.stack = append(c.stack, stackItem{n: n, i: len(n.children) + len(n.items) - 1})
+	}
+	if len(n.items) == 0 {
+		return nil
+	}
+	return n.items[len(n.items)-1]
+}
+
+// Prev moves the cursor to the previous item and returns that item.
+func (c *Cursor) Prev() Item {
+	if len(c.stack) == 0 {
+		return nil
+	}
+	si := len(c.stack) - 1
+	c.stack[si].i--
+	n := c.stack[si].n
+	i := c.stack[si].i
+	if i == -1 {
+		c.stack = c.stack[:len(c.stack)-1]
+		return c.Prev()
+	}
+	if len(n.children) == 0 {
+		return n.items[i]
+	} else if i%2 == 1 {
+		return n.items[i/2]
+	}
+	child := n.children[i/2]
+	c.stack = append(c.stack, stackItem{n: child,
+		i: len(child.children) + len(child.items)})
+	return c.Prev()
+}
+
+// Seek moves the cursor to provided item and returns that item.
+// If the item does not exist then the next item is returned.
+func (c *Cursor) Seek(pivot Item) Item {
+	c.stack = c.stack[:0]
+	n := c.t.root
+	for n != nil {
+		i, found := n.items.find(pivot, c.t.ctx)
+		c.stack = append(c.stack, stackItem{n: n})
+		if found {
+			if len(n.children) == 0 {
+				c.stack[len(c.stack)-1].i = i
+			} else {
+				c.stack[len(c.stack)-1].i = i*2 + 1
+			}
+			return n.items[i]
+		}
+		if len(n.children) == 0 {
+			if i == len(n.items) {
+				c.stack[len(c.stack)-1].i = i + 1
+				return c.Next()
+			}
+			c.stack[len(c.stack)-1].i = i
+			return n.items[i]
+		}
+		c.stack[len(c.stack)-1].i = i * 2
+		n = n.children[i]
+	}
+	return nil
+}
