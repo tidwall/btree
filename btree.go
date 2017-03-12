@@ -63,7 +63,7 @@ type Item interface {
 	// hold one of either a or b in the tree).
 	//
 	// There is a user-defined ctx argument that is equal to the ctx value which
-	// is set at time of the btree contruction.
+	// is set at time of the btree construction.
 	Less(than Item, ctx interface{}) bool
 }
 
@@ -669,16 +669,17 @@ func (t *BTree) ReplaceOrInsert(item Item) Item {
 		t.root.items = append(t.root.items, item)
 		t.length++
 		return nil
-	} else {
-		t.root = t.root.mutableFor(t.cow)
-		if len(t.root.items) >= t.maxItems() {
-			item2, second := t.root.split(t.maxItems() / 2)
-			oldroot := t.root
-			t.root = t.cow.newNode()
-			t.root.items = append(t.root.items, item2)
-			t.root.children = append(t.root.children, oldroot, second)
-		}
 	}
+
+	t.root = t.root.mutableFor(t.cow)
+	if len(t.root.items) >= t.maxItems() {
+		item2, second := t.root.split(t.maxItems() / 2)
+		oldroot := t.root
+		t.root = t.cow.newNode()
+		t.root.items = append(t.root.items, item2)
+		t.root.children = append(t.root.children, oldroot, second)
+	}
+
 	out := t.root.insert(item, t.maxItems(), t.ctx)
 	if out == nil {
 		t.length++
