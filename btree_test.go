@@ -343,6 +343,18 @@ func TestDescendGreaterThan(t *testing.T) {
 	}
 }
 
+func TestContext(t *testing.T) {
+	tr := New(*btreeDegree, nil)
+	if tr.Context() != nil {
+		t.Fatalf("context:\n got: %v\nwant: %v", tr.Context(), nil)
+	}
+	ctx := "foo"
+	tr.SetContext(ctx)
+	if tr.Context() != ctx {
+		t.Fatalf("context:\n got: %v\nwant: %v", tr.Context(), ctx)
+	}
+}
+
 const benchmarkTreeSize = 10000
 
 func BenchmarkInsert(b *testing.B) {
