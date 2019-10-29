@@ -343,6 +343,18 @@ func TestDescendGreaterThan(t *testing.T) {
 	}
 }
 
+func TestContext(t *testing.T) {
+	tr := New(*btreeDegree, nil)
+	if tr.Context() != nil {
+		t.Fatalf("context:\n got: %v\nwant: %v", tr.Context(), nil)
+	}
+	ctx := "foo"
+	tr.SetContext(ctx)
+	if tr.Context() != ctx {
+		t.Fatalf("context:\n got: %v\nwant: %v", tr.Context(), ctx)
+	}
+}
+
 const benchmarkTreeSize = 10000
 
 func BenchmarkInsert(b *testing.B) {
@@ -704,7 +716,7 @@ func TestCursor(t *testing.T) {
 	x := strings.Join(a, ",")
 	e := "0,2,4,6,8,10,12,14,16,18"
 	if x != e {
-		t.Fatal("expected '%v', got '%v'", e, x)
+		t.Fatalf("expected '%v', got '%v'", e, x)
 	}
 
 	c = tr.Cursor()
@@ -715,7 +727,7 @@ func TestCursor(t *testing.T) {
 	x = strings.Join(a, ",")
 	e = "18,16,14,12,10,8,6,4,2,0"
 	if x != e {
-		t.Fatal("expected '%v', got '%v'", e, x)
+		t.Fatalf("expected '%v', got '%v'", e, x)
 	}
 
 	for i := 0; i < 20; i++ {
