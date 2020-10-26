@@ -47,6 +47,12 @@ func New(less func(a, b interface{}) bool) *BTree {
 	return tr
 }
 
+// Less is a convenience function that performs a comparison of two items
+// using the same "less" function provided to New.
+func (tr *BTree) Less(a, b interface{}) bool {
+	return tr.less(a, b)
+}
+
 func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 	hint *uint64, depth int,
 ) (index int16, found bool) {
