@@ -14,7 +14,7 @@ $ go get -u github.com/tidwall/btree
 
 ## Usage
 
-```
+```go
 package main
 
 import (
