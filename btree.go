@@ -4,8 +4,6 @@
 
 package btree
 
-import "unsafe"
-
 const maxItems = 255
 const minItems = maxItems * 40 / 100
 
@@ -13,7 +11,7 @@ type node struct {
 	leaf     bool
 	numItems int16
 	items    [maxItems]interface{}
-	children [maxItems + 1]*node
+	children *[maxItems + 1]*node
 }
 
 type justaLeaf struct {
@@ -31,10 +29,17 @@ type BTree struct {
 }
 
 func newNode(leaf bool) *node {
-	if leaf {
-		return (*node)(unsafe.Pointer(&justaLeaf{leaf: leaf}))
+	n := &node{leaf: leaf}
+	if !leaf {
+		n.children = new([maxItems + 1]*node)
 	}
-	return (*node)(unsafe.Pointer(&node{leaf: leaf}))
+	return n
+}
+
+// PathHint is a utility type used with the *Hint() functions. Hints provide
+// faster operations for clustered keys.
+type PathHint struct {
+	path [8]uint8
 }
 
 // New returns a new BTree
@@ -54,13 +59,12 @@ func (tr *BTree) Less(a, b interface{}) bool {
 }
 
 func (n *node) find(key interface{}, less func(a, b interface{}) bool,
-	hint *uint64, depth int,
+	hint *PathHint, depth int,
 ) (index int16, found bool) {
 	low := int16(0)
 	high := n.numItems - 1
-	ht := (*[8]uint8)(unsafe.Pointer(hint))
-	if ht != nil && depth < 8 {
-		index = int16((*ht)[depth])
+	if hint != nil && depth < 8 {
+		index = int16(hint.path[depth])
 		if index > n.numItems-1 {
 			index = n.numItems - 1
 		}
@@ -90,18 +94,18 @@ func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 		found = false
 	}
 done:
-	if ht != nil && depth < 8 {
+	if hint != nil && depth < 8 {
 		if n.leaf && found {
-			(*ht)[depth] = byte(index + 1)
+			hint.path[depth] = byte(index + 1)
 		} else {
-			(*ht)[depth] = byte(index)
+			hint.path[depth] = byte(index)
 		}
 	}
 	return index, found
 }
 
 // SetHint sets or replace a value for a key using a path hint
-func (tr *BTree) SetHint(item interface{}, hint *uint64) (prev interface{}) {
+func (tr *BTree) SetHint(item interface{}, hint *PathHint) (prev interface{}) {
 	if item == nil {
 		panic("nil item")
 	}
@@ -156,7 +160,7 @@ func (n *node) split() (right *node, median interface{}) {
 }
 
 func (n *node) set(item interface{}, less func(a, b interface{}) bool,
-	hint *uint64, depth int,
+	hint *PathHint, depth int,
 ) (prev interface{}) {
 	i, found := n.find(item, less, hint, depth)
 	if found {
@@ -211,7 +215,7 @@ func (tr *BTree) Get(key interface{}) interface{} {
 }
 
 // GetHint gets a value for key using a path hint
-func (tr *BTree) GetHint(key interface{}, hint *uint64) interface{} {
+func (tr *BTree) GetHint(key interface{}, hint *PathHint) interface{} {
 	if tr.root == nil || key == nil {
 		return nil
 	}
@@ -241,7 +245,7 @@ func (tr *BTree) Delete(key interface{}) interface{} {
 }
 
 // DeleteHint deletes a value for a key using a path hint
-func (tr *BTree) DeleteHint(key interface{}, hint *uint64) interface{} {
+func (tr *BTree) DeleteHint(key interface{}, hint *PathHint) interface{} {
 	if tr.root == nil || key == nil {
 		return nil
 	}
@@ -261,7 +265,7 @@ func (tr *BTree) DeleteHint(key interface{}, hint *uint64) interface{} {
 }
 
 func (n *node) delete(max bool, key interface{},
-	less func(a, b interface{}) bool, hint *uint64, depth int,
+	less func(a, b interface{}) bool, hint *PathHint, depth int,
 ) interface{} {
 	var i int16
 	var found bool
@@ -373,7 +377,7 @@ func (tr *BTree) Ascend(pivot interface{}, iter func(item interface{}) bool) {
 }
 
 func (n *node) ascend(pivot interface{}, less func(a, b interface{}) bool,
-	hint *uint64, depth int, iter func(item interface{}) bool,
+	hint *PathHint, depth int, iter func(item interface{}) bool,
 ) bool {
 	i, found := n.find(pivot, less, hint, depth)
 	if !found {
@@ -434,7 +438,7 @@ func (tr *BTree) Descend(pivot interface{}, iter func(item interface{}) bool) {
 }
 
 func (n *node) descend(pivot interface{}, less func(a, b interface{}) bool,
-	hint *uint64, depth int, iter func(item interface{}) bool,
+	hint *PathHint, depth int, iter func(item interface{}) bool,
 ) bool {
 	i, found := n.find(pivot, less, hint, depth)
 	if !found {

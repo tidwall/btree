@@ -475,7 +475,7 @@ func BenchmarkTidwallSequentialSetHint(b *testing.B) {
 	keys := rand.Perm(b.N)
 	sort.Ints(keys)
 	b.ResetTimer()
-	var hint uint64
+	var hint PathHint
 	for i := 0; i < b.N; i++ {
 		tr.SetHint(keys[i], &hint)
 	}
@@ -490,7 +490,7 @@ func BenchmarkTidwallSequentialGetHint(b *testing.B) {
 		tr.Set(keys[i])
 	}
 	b.ResetTimer()
-	var hint uint64
+	var hint PathHint
 	for i := 0; i < b.N; i++ {
 		tr.GetHint(keys[i], &hint)
 		// fmt.Printf("%064b\n", hint)
@@ -755,7 +755,7 @@ func TestRandom(t *testing.T) {
 	tr.Set(min)
 	tr.Set(max)
 	shuffle(r, keys)
-	var hint uint64
+	var hint PathHint
 	for i := 0; i < len(keys); i++ {
 		prev := tr.Get(keys[i])
 		if prev == nil || prev.(int) != keys[i] {
@@ -933,7 +933,7 @@ func TestRandom(t *testing.T) {
 // 	print("tidwall: set-seq-hint  ")
 // 	tr = New(less)
 // 	sortInts()
-// 	var hint uint64
+// 	var hint PathHint
 // 	lotsa.Ops(N, 1, func(i, _ int) {
 // 		tr.SetHint(keys[i], &hint)
 // 	})
