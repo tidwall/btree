@@ -130,6 +130,11 @@ Max()                   # return the last item in the btree
 PopMin()                # remove and return the first item in the btree
 PopMax()                # remove and return the last item in the btree
 ```
+### Bulk loading
+
+```
+Load(item)              # load presorted items into tree
+```
 
 ### Path hints
 
