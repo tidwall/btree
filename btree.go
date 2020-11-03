@@ -4,8 +4,6 @@
 
 package btree
 
-//tinygen:T interface{}
-
 const maxItems = 255
 const minItems = maxItems * 40 / 100
 
@@ -14,12 +12,6 @@ type node struct {
 	numItems int16
 	items    [maxItems]interface{}
 	children *[maxItems + 1]*node
-}
-
-type justaLeaf struct {
-	leaf     bool
-	numItems int16
-	items    [maxItems]interface{}
 }
 
 // BTree is an ordered set items
