@@ -1145,3 +1145,16 @@ func TestCopy(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+func TestLess(t *testing.T) {
+	tr := New(intLess)
+	if !tr.Less(1, 2) {
+		panic("invalid")
+	}
+	if tr.Less(2, 1) {
+		panic("invalid")
+	}
+	if tr.Less(1, 1) {
+		panic("invalid")
+	}
+}
