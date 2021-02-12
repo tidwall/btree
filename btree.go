@@ -90,8 +90,7 @@ func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 			high = mid - 1
 		}
 	}
-	if low > 0 && !less(n.items[low-1], key) &&
-		!less(key, n.items[low-1]) {
+	if low > 0 && !less(n.items[low-1], key) {
 		index = low - 1
 		found = true
 	} else {
