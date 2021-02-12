@@ -601,6 +601,9 @@ func (tr *BTree) PopMin() interface{} {
 			n.items[n.numItems-1] = nil
 			n.numItems--
 			tr.length--
+			if tr.length == 0 {
+				tr.root = nil
+			}
 			return item
 		}
 		n = tr.cowLoad(&n.children[0])
@@ -626,6 +629,9 @@ func (tr *BTree) PopMax() interface{} {
 			n.items[n.numItems-1] = nil
 			n.numItems--
 			tr.length--
+			if tr.length == 0 {
+				tr.root = nil
+			}
 			return item
 		}
 		n = tr.cowLoad(&n.children[n.numItems])
