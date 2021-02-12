@@ -10,9 +10,12 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -1007,5 +1010,138 @@ func (tr *BTree) sane() {
 	}
 	if !tr.saneorder() {
 		panic("!sane-order")
+	}
+}
+
+type copyItem struct {
+	depth int
+	key   int
+	value int
+}
+
+func copyItemLess(a, b interface{}) bool {
+	return a.(copyItem).key < b.(copyItem).key
+}
+
+func testCopyUpdates(tr *BTree, depth, value int,
+	numItems, numCopies int, maxDepth int, wg *sync.WaitGroup,
+) {
+	defer wg.Done()
+	orgLen := tr.Len()
+
+	var wg2 int32
+	if depth < maxDepth {
+		wg2 = int32(numCopies)
+		wg.Add(numCopies)
+		for i := 0; i < numCopies; i++ {
+			go func(tr *BTree, depth, value int) {
+				defer func() {
+					atomic.AddInt32(&wg2, -1)
+					wg.Done()
+				}()
+
+				// here we can run operations on the new tree
+				// delete a bunch of items
+				for _, i := range rand.Perm(numItems / 3) {
+					v := tr.Delete(copyItem{key: i})
+					if v.(copyItem).key != i {
+						panic("invalid")
+					}
+				}
+
+				// add random items with big keys
+				randItems := make([]copyItem, numItems/3)
+				for i, key := range rand.Perm(len(randItems)) {
+					key = 100_000_000 + key
+					randItems[i] = copyItem{key: key, depth: -1, value: -2}
+					v := tr.Load(randItems[i])
+					if v != nil {
+						panic("invalid")
+					}
+				}
+
+				// popmax 10
+				for i := 0; i < 10; i++ {
+					if tr.PopMax() == nil {
+						panic("invalid")
+					}
+				}
+
+				// popmin 10
+				for i := 0; i < 10; i++ {
+					if tr.PopMin() == nil {
+						panic("invalid")
+					}
+				}
+
+				// delete the random items
+				for _, key := range randItems {
+					tr.Delete(key)
+				}
+
+				// reset all of the items
+				nvalue := rand.Int()
+				for _, key := range rand.Perm(orgLen) {
+					tr.Set(copyItem{key: key, value: nvalue, depth: depth})
+				}
+
+				wg.Add(1)
+				go testCopyUpdates(tr, depth, nvalue,
+					numItems, numCopies, maxDepth, wg)
+
+			}(tr.Copy(), depth+1, value)
+		}
+	}
+
+	// This loop runs hot, there's a gosched at the bottom to relieve pressure.
+	for {
+		tr.sane()
+		var items []copyItem
+		tr.Ascend(nil, func(item interface{}) bool {
+			items = append(items, item.(copyItem))
+			return true
+		})
+		sort.SliceIsSorted(items, func(i, j int) bool {
+			return copyItemLess(items[i], items[j])
+		})
+		if len(items) != numItems {
+			panic(fmt.Sprintf("expected '%d', got '%d'", numItems, len(items)))
+		}
+		if len(items) != orgLen {
+			panic(fmt.Sprintf("expected '%d', got '%d'", orgLen, len(items)))
+		}
+		if tr.Len() != orgLen {
+			panic(fmt.Sprintf("expected '%d', got '%d'", orgLen, tr.Len()))
+		}
+		for i, ci := range items {
+			ci2 := copyItem{depth: depth, value: value, key: i}
+			if ci != ci2 {
+				panic(fmt.Sprintf("expected %#v, got %#v", ci2, ci))
+			}
+		}
+		if atomic.LoadInt32(&wg2) == 0 {
+			break
+		}
+		runtime.Gosched()
+	}
+}
+
+// TestCopy tests the Copy function and performs lots of operations on a bunch
+// of random btrees. This can be run with -race flag, but it may be very slow.
+func TestCopy(t *testing.T) {
+	start := time.Now()
+	for time.Since(start) < time.Second*5 {
+		maxDepth := rand.Intn(5)      // max goroutine depth
+		numCopies := rand.Intn(5)     // number of copies to make per depth
+		numItems := rand.Intn(10_000) // number of original items
+		nvalue := rand.Int()
+		tr := New(copyItemLess)
+		for _, key := range rand.Perm(numItems) {
+			tr.Set(copyItem{key: key, depth: 0, value: nvalue})
+		}
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go testCopyUpdates(tr, 0, nvalue, numItems, numCopies, maxDepth, &wg)
+		wg.Wait()
 	}
 }
