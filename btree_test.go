@@ -1062,15 +1062,21 @@ func testCopyUpdates(tr *BTree, depth, value int,
 
 				// popmax 10
 				for i := 0; i < 10; i++ {
+					n := tr.Len()
 					if tr.PopMax() == nil {
-						panic("invalid")
+						if n != 0 {
+							panic("invalid")
+						}
 					}
 				}
 
 				// popmin 10
 				for i := 0; i < 10; i++ {
+					n := tr.Len()
 					if tr.PopMin() == nil {
-						panic("invalid")
+						if n != 0 {
+							panic("invalid")
+						}
 					}
 				}
 
