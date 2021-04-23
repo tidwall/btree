@@ -40,44 +40,44 @@ func randKeys(N int) (keys []string) {
 	return
 }
 
-const flatLeaf = true
+// const flatLeaf = true
 
-func (tr *BTree) print() {
-	tr.root.print(0, tr.Height())
-}
+// func (tr *BTree) print() {
+// 	tr.root.print(0, tr.Height())
+// }
 
-func (n *node) print(level, height int) {
-	if n == nil {
-		println("NIL")
-		return
-	}
-	if height == 0 && flatLeaf {
-		fmt.Printf("%v", strings.Repeat("  ", level))
-	}
-	for i := int16(0); i < n.numItems; i++ {
-		if height > 0 {
-			n.children[i].print(level+1, height-1)
-		}
-		if height > 0 || (height == 0 && !flatLeaf) {
-			fmt.Printf("%v%v\n", strings.Repeat("  ", level), n.items[i])
-		} else {
-			if i > 0 {
-				fmt.Printf(",")
-			}
-			fmt.Printf("%v", n.items[i])
-		}
-	}
-	if height == 0 && flatLeaf {
-		fmt.Printf("\n")
-	}
-	if height > 0 {
-		n.children[n.numItems].print(level+1, height-1)
-	}
-}
+// func (n *node) print(level, height int) {
+// 	if n == nil {
+// 		println("NIL")
+// 		return
+// 	}
+// 	if height == 0 && flatLeaf {
+// 		fmt.Printf("%v", strings.Repeat("  ", level))
+// 	}
+// 	for i := int16(0); i < n.numItems; i++ {
+// 		if height > 0 {
+// 			n.children[i].print(level+1, height-1)
+// 		}
+// 		if height > 0 || (height == 0 && !flatLeaf) {
+// 			fmt.Printf("%v%v\n", strings.Repeat("  ", level), n.items[i])
+// 		} else {
+// 			if i > 0 {
+// 				fmt.Printf(",")
+// 			}
+// 			fmt.Printf("%v", n.items[i])
+// 		}
+// 	}
+// 	if height == 0 && flatLeaf {
+// 		fmt.Printf("\n")
+// 	}
+// 	if height > 0 {
+// 		n.children[n.numItems].print(level+1, height-1)
+// 	}
+// }
 
 func (tr *BTree) deepPrint() {
-	fmt.Printf("%#v\n", tr)
-	tr.root.deepPrint(0)
+	// fmt.Printf("%#v\n", tr)
+	tr.root.deepPrint(1)
 }
 
 func (n *node) deepPrint(level int) {
@@ -85,17 +85,27 @@ func (n *node) deepPrint(level int) {
 		fmt.Printf("%v %#v\n", strings.Repeat("  ", level), n)
 		return
 	}
-	fmt.Printf("%v count: %v\n", strings.Repeat("  ", level), n.numItems)
-	fmt.Printf("%v items: %v\n", strings.Repeat("  ", level), n.items[:n.numItems])
-	if !n.leaf {
-		fmt.Printf("%v child: %v\n", strings.Repeat("  ", level), n.children)
-	}
+	vals := fmt.Sprintf("%v ", strings.Repeat(">", level))
+	vals += fmt.Sprintf("%v", n.items[:n.numItems])
+	fmt.Printf("%-30s (count: %d)", vals, n.count)
+	fmt.Printf("\n")
+	// fmt.Printf("%v count:  %v\n", strings.Repeat(">", level), n.count)
+	// fmt.Printf("%v nItems: %v\n", strings.Repeat(">", level), n.numItems)
+	// fmt.Printf("%v items:  %v\n", strings.Repeat(">", level), n.items[:n.numItems])
+	// if !n.leaf {
+	// 	fmt.Printf("%v> ====================================\n", strings.Repeat(">", level))
+	// 	// 	fmt.Printf("%v child: %v\n", strings.Repeat("  ", level), n.children)
+	// }
 	if !n.leaf {
 		for i := int16(0); i < n.numItems; i++ {
 			n.children[i].deepPrint(level + 1)
 		}
 		n.children[n.numItems].deepPrint(level + 1)
 	}
+	// if !n.leaf {
+	// 	fmt.Printf("%v> ====================================\n", strings.Repeat(">", level))
+	// 	// 	fmt.Printf("%v child: %v\n", strings.Repeat("  ", level), n.children)
+	// }
 }
 
 func stringsEquals(a, b []string) bool {
@@ -140,8 +150,7 @@ func TestDescend(t *testing.T) {
 		return true
 	})
 	for i := 999; i >= 0; i-- {
-		var key string
-		key = fmt.Sprintf("%03d", i)
+		key := fmt.Sprintf("%03d", i)
 		var all []string
 		tr.Descend(pair{key, nil}, func(item interface{}) bool {
 			all = append(all, item.(pair).key)
@@ -649,6 +658,13 @@ func TestRandom(t *testing.T) {
 		t.Fatalf("expected %d, got %d", tr.Len(), len(keys))
 	}
 
+	for i := 0; i < tr.Len(); i++ {
+		item := tr.GetAt(i)
+		if item != keys[i] {
+			t.Fatalf("expected %d, got %d", keys[i], item)
+		}
+	}
+
 	n = 0
 	tr.Descend(nil, func(item interface{}) bool {
 		n++
@@ -927,6 +943,9 @@ func (n *node) deepcount() int {
 			count += n.children[i].deepcount()
 		}
 	}
+	if n.count != count {
+		panic("!node-count")
+	}
 	return count
 }
 
@@ -968,6 +987,42 @@ func (tr *BTree) saneprops() bool {
 	return true
 }
 
+func (n *node) sanenils() bool {
+	for i := 0; i < int(n.numItems); i++ {
+		if n.items[i] == nil {
+			return false
+		}
+	}
+	for i := int(n.numItems); i < len(n.items); i++ {
+		if n.items[i] != nil {
+			return false
+		}
+	}
+	if !n.leaf {
+		for i := 0; i <= int(n.numItems); i++ {
+			if n.children[i] == nil {
+				return false
+			}
+			if !n.children[i].sanenils() {
+				return false
+			}
+		}
+		for i := int(n.numItems) + 1; i < len(n.children); i++ {
+			if n.children[i] != nil {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (tr *BTree) sanenils() bool {
+	if tr.root != nil {
+		return tr.root.sanenils()
+	}
+	return true
+}
+
 func (tr *BTree) saneorder() bool {
 	var last interface{}
 	var count int
@@ -987,7 +1042,7 @@ func (tr *BTree) saneorder() bool {
 			count++
 		}
 	})
-	return !bad && count == tr.length
+	return !bad && count == tr.count
 }
 
 // btree_sane returns true if the entire btree and every node are valid.
@@ -1002,7 +1057,7 @@ func (tr *BTree) sane() {
 	if !tr.saneheight() {
 		panic("!sane-height")
 	}
-	if tr.Len() != tr.length || tr.deepcount() != tr.length {
+	if tr.Len() != tr.count || tr.deepcount() != tr.count {
 		panic("!sane-count")
 	}
 	if !tr.saneprops() {
@@ -1010,6 +1065,9 @@ func (tr *BTree) sane() {
 	}
 	if !tr.saneorder() {
 		panic("!sane-order")
+	}
+	if !tr.sanenils() {
+		panic("!sane-nils")
 	}
 }
 
@@ -1162,5 +1220,26 @@ func TestLess(t *testing.T) {
 	}
 	if tr.Less(1, 1) {
 		panic("invalid")
+	}
+}
+
+func TestDeleteAt(t *testing.T) {
+	N := 10_000
+	tr := New(intLess)
+	rand.Seed(0)
+	keys := rand.Perm(N)
+	for _, key := range keys {
+		tr.Set(key)
+	}
+	tr.sane()
+
+	for tr.Len() > 0 {
+		index := rand.Intn(tr.Len())
+		item1 := tr.GetAt(index)
+		item2 := tr.DeleteAt(index)
+		if item1 != item2 {
+			panic("mismatch")
+		}
+		tr.sane()
 	}
 }
