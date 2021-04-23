@@ -70,12 +70,6 @@ func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 	low := int16(0)
 	high := n.numItems - 1
 	if hint != nil && depth < 8 && hint.used[depth] {
-		// 00000000 11111111 22222222 333333
-		//       [c]      [f]      [i]
-		// [a][b]   [d][e]   [g][h]   [j][k]
-
-		//      key: f, path: 0
-
 		index = int16(hint.path[depth])
 		if index >= n.numItems {
 			// tail item
