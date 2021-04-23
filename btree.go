@@ -6,7 +6,7 @@ package btree
 
 import "sync"
 
-const maxItems = 255
+const maxItems = 255 // max items per node. max children is +1
 const minItems = maxItems * 40 / 100
 
 type cow struct {
@@ -43,6 +43,7 @@ func (tr *BTree) newNode(leaf bool) *node {
 // PathHint is a utility type used with the *Hint() functions. Hints provide
 // faster operations for clustered keys.
 type PathHint struct {
+	used [8]bool
 	path [8]uint8
 }
 
@@ -68,18 +69,38 @@ func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 ) (index int16, found bool) {
 	low := int16(0)
 	high := n.numItems - 1
-	if hint != nil && depth < 8 {
+	if hint != nil && depth < 8 && hint.used[depth] {
+		// 00000000 11111111 22222222 333333
+		//       [c]      [f]      [i]
+		// [a][b]   [d][e]   [g][h]   [j][k]
+
+		//      key: f, path: 0
+
 		index = int16(hint.path[depth])
-		if index > n.numItems-1 {
+		if index >= n.numItems {
+			// tail item
+			if less(n.items[n.numItems-1], key) {
+				if less(key, n.items[n.numItems-1]) {
+					index = n.numItems - 1
+					found = true
+					goto path_match
+				} else {
+					index = n.numItems
+					goto path_match
+				}
+			}
 			index = n.numItems - 1
 		}
 		if less(key, n.items[index]) {
+			if index == 0 || less(n.items[index-1], key) {
+				goto path_match
+			}
 			high = index - 1
 		} else if less(n.items[index], key) {
 			low = index + 1
 		} else {
 			found = true
-			goto done
+			goto path_match
 		}
 	}
 	for low <= high {
@@ -97,13 +118,16 @@ func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 		index = low
 		found = false
 	}
-done:
-	if hint != nil && depth < 8 {
-		if n.leaf && found {
-			hint.path[depth] = byte(index + 1)
-		} else {
-			hint.path[depth] = byte(index)
-		}
+	if hint == nil || depth >= 8 {
+		return index, found
+	}
+
+path_match:
+	hint.used[depth] = true
+	if n.leaf && found {
+		hint.path[depth] = byte(index + 1)
+	} else {
+		hint.path[depth] = byte(index)
 	}
 	return index, found
 }
