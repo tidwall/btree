@@ -40,43 +40,8 @@ func randKeys(N int) (keys []string) {
 	return
 }
 
-// const flatLeaf = true
-
-// func (tr *BTree) print() {
-// 	tr.root.print(0, tr.Height())
-// }
-
-// func (n *node) print(level, height int) {
-// 	if n == nil {
-// 		println("NIL")
-// 		return
-// 	}
-// 	if height == 0 && flatLeaf {
-// 		fmt.Printf("%v", strings.Repeat("  ", level))
-// 	}
-// 	for i := int16(0); i < n.numItems; i++ {
-// 		if height > 0 {
-// 			n.children[i].print(level+1, height-1)
-// 		}
-// 		if height > 0 || (height == 0 && !flatLeaf) {
-// 			fmt.Printf("%v%v\n", strings.Repeat("  ", level), n.items[i])
-// 		} else {
-// 			if i > 0 {
-// 				fmt.Printf(",")
-// 			}
-// 			fmt.Printf("%v", n.items[i])
-// 		}
-// 	}
-// 	if height == 0 && flatLeaf {
-// 		fmt.Printf("\n")
-// 	}
-// 	if height > 0 {
-// 		n.children[n.numItems].print(level+1, height-1)
-// 	}
-// }
-
+//lint:ignore U1000 used for debugging
 func (tr *BTree) deepPrint() {
-	// fmt.Printf("%#v\n", tr)
 	tr.root.deepPrint(1)
 }
 
@@ -89,23 +54,12 @@ func (n *node) deepPrint(level int) {
 	vals += fmt.Sprintf("%v", n.items[:n.numItems])
 	fmt.Printf("%-30s (count: %d)", vals, n.count)
 	fmt.Printf("\n")
-	// fmt.Printf("%v count:  %v\n", strings.Repeat(">", level), n.count)
-	// fmt.Printf("%v nItems: %v\n", strings.Repeat(">", level), n.numItems)
-	// fmt.Printf("%v items:  %v\n", strings.Repeat(">", level), n.items[:n.numItems])
-	// if !n.leaf {
-	// 	fmt.Printf("%v> ====================================\n", strings.Repeat(">", level))
-	// 	// 	fmt.Printf("%v child: %v\n", strings.Repeat("  ", level), n.children)
-	// }
 	if !n.leaf {
 		for i := int16(0); i < n.numItems; i++ {
 			n.children[i].deepPrint(level + 1)
 		}
 		n.children[n.numItems].deepPrint(level + 1)
 	}
-	// if !n.leaf {
-	// 	fmt.Printf("%v> ====================================\n", strings.Repeat(">", level))
-	// 	// 	fmt.Printf("%v child: %v\n", strings.Repeat("  ", level), n.children)
-	// }
 }
 
 func stringsEquals(a, b []string) bool {
