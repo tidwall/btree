@@ -201,6 +201,10 @@ func (n *node) updateCount() {
 	}
 }
 
+// This operation should not be inlined because it's expensive and rarely
+// called outside of heavy copy-on-write situations. Marking it "noinline"
+// allows for the parent cowLoad to be inlined.
+// go:noinline
 func (tr *BTree) copy(n *node) *node {
 	n2 := *n
 	n2.cow = tr.cow
@@ -212,7 +216,7 @@ func (tr *BTree) copy(n *node) *node {
 	return &n2
 }
 
-// cowLoad loaded the provide node and, if needed, performs a copy-on-write.
+// cowLoad loads the provide node and, if needed, performs a copy-on-write.
 func (tr *BTree) cowLoad(cn **node) *node {
 	if (*cn).cow != tr.cow {
 		*cn = tr.copy(*cn)
