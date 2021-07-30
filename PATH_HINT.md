@@ -8,7 +8,7 @@ A standard [B-tree](https://en.wikipedia.org/wiki/B-tree) is an ordered tree-bas
 
 <img width="322" alt="image" src="https://user-images.githubusercontent.com/1156077/127664015-14ca38bb-1a3b-4d2f-80ff-27be0bd3d886.png">
 
-Searching for items in a B-tree is a fast. [O(log N)](https://en.wikipedia.org/wiki/Big_O_notation) to be exact.
+Searching for items in a B-tree is fast. [O(log N)](https://en.wikipedia.org/wiki/Big_O_notation) to be exact.
 This is because the [binary search algorithm](https://en.wikipedia.org/wiki/Binary_search_algorithm) is used. 
 
 A binary search works by first comparing the item at the middle-most index of the root node with the target item. 
