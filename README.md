@@ -9,7 +9,7 @@ An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) impl
 - `Copy()` method with copy-on-write support.
 - Fast bulk loading for pre-ordered data using the `Load()` method.
 - All operations are thread-safe.
-- Path hinting optimization for operations with nearby keys.
+- [Path hinting](PATH_HINT.md) optimization for operations with nearby keys.
 
 ## Installing
 
