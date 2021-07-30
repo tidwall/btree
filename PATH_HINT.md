@@ -9,7 +9,7 @@ A standard [B-tree](https://en.wikipedia.org/wiki/B-tree) is an ordered tree-bas
 <img width="322" alt="image" src="https://user-images.githubusercontent.com/1156077/127664015-14ca38bb-1a3b-4d2f-80ff-27be0bd3d886.png">
 
 Searching for items in a B-tree is a fast. [O(log N)](https://en.wikipedia.org/wiki/Big_O_notation) to be exact.
-This is because the [binary search algorithm](https://en.wikipedia.org/wiki/Binary_search_algorithm) is used when searching for a target item. 
+This is because the [binary search algorithm](https://en.wikipedia.org/wiki/Binary_search_algorithm) is used. 
 
 A binary search works by first comparing the item at the middle-most index of the root node with the target item. 
 If the middle item is greater than the target item, then it divides the node in two and does the binary search on the left part of the node. If the middle is less, it searches the right part. And so on. If the target item is found, then the search stop. If the item is not found, then the search is passed to the child node at the appropriate index. This traversal terminates when item is found or there are no more child nodes.
@@ -18,7 +18,7 @@ If the middle item is greater than the target item, then it divides the node in 
 
 ## The Path
 
-Each index a component of the path to the item (or where the item should be stored, if it does not exist in the tree).
+Each index is a component of the path to the item (or where the item should be stored, if it does not exist in the tree).
 
 Take the first example image. The item 9 is at path “1/0”. The item 16 is at path “1”. The item 21 is at path “2/1”. The item 5 is at path “0/2”.
 
