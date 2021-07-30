@@ -29,11 +29,11 @@ A Path Hint is a predefined path that is provided to B-tree operations. It’s j
 I’ve found using path hints can lead to a little performance increase of 150% - 300%. This is because in real-world cases the items that I’m working with are usually nearby each other in the tree. 
 
 Take for example inserting a group of timeseries points. They may often be received as chucks of near-contiguous items.  
-Or, you are sequentially inserting an ordered group of rows somewhere in the middle of a table.  
-Or, you have a Redis-style key/value store, where the keys look have the common structure “user:98512:name”, “user:98512:email”, and you want to update a bunch of values for specified user.  
+Or, I'm are sequentially inserting an ordered group of rows somewhere in the middle of a table.  
+Or, I'm have a Redis-style key/value store, where the keys look have the common structure “user:98512:name”, “user:98512:email”, and I want to update a bunch of values for specified user.  
 Using a path hint may help to avoid the unnecessary binary searching in each of these examples.
 
-While you may see a 3x boost in when the path hint is right on, you’ll only see around 5% decrease when the path hint is totally wrong.
+While I may see a 3x boost in when the path hint is right on, I'll only see around 5% decrease when the path hint is totally wrong.
 
 ## Using a Path Hint
 
