@@ -1,10 +1,10 @@
 # B-tree Path Hints
 
-I use a thing I call path hints in my B-tree [C](https://github.com/tidwall/btree.c) and [Go](https://github.com/tidwall/btree) implementations.
+I use a thing I call path hints in my B-tree [C](https://github.com/tidwall/btree.c) and [Go](https://github.com/tidwall/btree) implementations. It's a search optimization.
 
 ## The B-tree
 
-A standard [B-tree](https://en.wikipedia.org/wiki/B-tree) is an ordered tree-based data structure that stores its items in nodes. The B-tree has is a single root node, which may have children nodes, and those children nodes may also have children nodes. 
+A standard [B-tree](https://en.wikipedia.org/wiki/B-tree) is an ordered tree-based data structure that stores its items in nodes. The B-tree has a single root node, which may have children nodes, and those children nodes may also have children nodes. 
 
 <img width="322" alt="image" src="https://user-images.githubusercontent.com/1156077/127664015-14ca38bb-1a3b-4d2f-80ff-27be0bd3d886.png">
 
