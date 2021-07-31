@@ -4,7 +4,9 @@
 
 package btree
 
-import "sync"
+import (
+	"sync"
+)
 
 const maxItems = 255 // max items per node. max children is +1
 const minItems = maxItems * 40 / 100
@@ -29,6 +31,7 @@ type BTree struct {
 	root  *node
 	count int
 	less  func(a, b interface{}) bool
+	locks bool
 }
 
 func (tr *BTree) newNode(leaf bool) *node {
@@ -49,12 +52,26 @@ type PathHint struct {
 
 // New returns a new BTree
 func New(less func(a, b interface{}) bool) *BTree {
+	return newBTree(less, true)
+}
+
+// NewNonConcurrent returns a new BTree which is not safe for concurrent
+// write operations by multiple goroutines.
+//
+// This is useful for when you do not need the BTree to manage the locking,
+// but would rather do it yourself.
+func NewNonConcurrent(less func(a, b interface{}) bool) *BTree {
+	return newBTree(less, false)
+}
+
+func newBTree(less func(a, b interface{}) bool, locks bool) *BTree {
 	if less == nil {
 		panic("nil less")
 	}
 	tr := new(BTree)
 	tr.mu = new(sync.RWMutex)
 	tr.less = less
+	tr.locks = locks
 	return tr
 }
 
@@ -131,10 +148,10 @@ func (tr *BTree) SetHint(item interface{}, hint *PathHint) (prev interface{}) {
 	if item == nil {
 		panic("nil item")
 	}
-	tr.mu.Lock()
-	prev = tr.setHint(item, hint)
-	tr.mu.Unlock()
-	return prev
+	if tr.lock() {
+		defer tr.unlock()
+	}
+	return tr.setHint(item, hint)
 }
 
 func (tr *BTree) setHint(item interface{}, hint *PathHint) (prev interface{}) {
@@ -284,8 +301,9 @@ func (tr *BTree) Get(key interface{}) interface{} {
 
 // GetHint gets a value for key using a path hint
 func (tr *BTree) GetHint(key interface{}, hint *PathHint) interface{} {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	if tr.root == nil || key == nil {
 		return nil
 	}
@@ -316,10 +334,10 @@ func (tr *BTree) Delete(key interface{}) interface{} {
 
 // DeleteHint deletes a value for a key using a path hint
 func (tr *BTree) DeleteHint(key interface{}, hint *PathHint) interface{} {
-	tr.mu.Lock()
-	prev := tr.deleteHint(key, hint)
-	tr.mu.Unlock()
-	return prev
+	if tr.lock() {
+		defer tr.unlock()
+	}
+	return tr.deleteHint(key, hint)
 }
 
 func (tr *BTree) deleteHint(key interface{}, hint *PathHint) interface{} {
@@ -463,8 +481,9 @@ func (tr *BTree) delete(cn **node, max bool, key interface{},
 // Pass nil for pivot to scan all item in ascending order
 // Return false to stop iterating
 func (tr *BTree) Ascend(pivot interface{}, iter func(item interface{}) bool) {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	if tr.root == nil {
 		return
 	}
@@ -526,8 +545,9 @@ func (n *node) reverse(iter func(item interface{}) bool) bool {
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
 func (tr *BTree) Descend(pivot interface{}, iter func(item interface{}) bool) {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	if tr.root == nil {
 		return
 	}
@@ -568,8 +588,9 @@ func (tr *BTree) Load(item interface{}) interface{} {
 	if item == nil {
 		panic("nil item")
 	}
-	tr.mu.Lock()
-	defer tr.mu.Unlock()
+	if tr.lock() {
+		defer tr.unlock()
+	}
 	if tr.root == nil {
 		return tr.setHint(item, nil)
 	}
@@ -604,8 +625,9 @@ func (tr *BTree) Load(item interface{}) interface{} {
 // Min returns the minimum item in tree.
 // Returns nil if the tree has no items.
 func (tr *BTree) Min() interface{} {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	if tr.root == nil {
 		return nil
 	}
@@ -621,8 +643,9 @@ func (tr *BTree) Min() interface{} {
 // Max returns the maximum item in tree.
 // Returns nil if the tree has no items.
 func (tr *BTree) Max() interface{} {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	if tr.root == nil {
 		return nil
 	}
@@ -638,8 +661,9 @@ func (tr *BTree) Max() interface{} {
 // PopMin removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *BTree) PopMin() interface{} {
-	tr.mu.Lock()
-	defer tr.mu.Unlock()
+	if tr.lock() {
+		defer tr.unlock()
+	}
 	if tr.root == nil {
 		return nil
 	}
@@ -678,8 +702,9 @@ func (tr *BTree) PopMin() interface{} {
 // PopMax removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *BTree) PopMax() interface{} {
-	tr.mu.Lock()
-	defer tr.mu.Unlock()
+	if tr.lock() {
+		defer tr.unlock()
+	}
 	if tr.root == nil {
 		return nil
 	}
@@ -717,8 +742,9 @@ func (tr *BTree) PopMax() interface{} {
 // GetAt returns the value at index.
 // Return nil if the tree is empty or the index is out of bounds.
 func (tr *BTree) GetAt(index int) interface{} {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	if tr.root == nil || index < 0 || index >= tr.count {
 		return nil
 	}
@@ -743,8 +769,9 @@ func (tr *BTree) GetAt(index int) interface{} {
 // DeleteAt deletes the item at index.
 // Return nil if the tree is empty or the index is out of bounds.
 func (tr *BTree) DeleteAt(index int) interface{} {
-	tr.mu.Lock()
-	defer tr.mu.Unlock()
+	if tr.lock() {
+		defer tr.unlock()
+	}
 	if tr.root == nil || index < 0 || index >= tr.count {
 		return nil
 	}
@@ -804,8 +831,9 @@ outer:
 // Height returns the height of the tree.
 // Returns zero if tree has no items.
 func (tr *BTree) Height() int {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	var height int
 	if tr.root != nil {
 		n := tr.root
@@ -823,8 +851,9 @@ func (tr *BTree) Height() int {
 // Walk iterates over all items in tree, in order.
 // The items param will contain one or more items.
 func (tr *BTree) Walk(iter func(item []interface{})) {
-	tr.mu.RLock()
-	defer tr.mu.RUnlock()
+	if tr.rlock() {
+		defer tr.runlock()
+	}
 	if tr.root != nil {
 		tr.root.walk(iter)
 	}
@@ -845,11 +874,34 @@ func (n *node) walk(iter func(item []interface{})) {
 // Copy the tree. This operation is very fast because it only performs a
 // shadowed copy.
 func (tr *BTree) Copy() *BTree {
-	tr.mu.Lock()
+	if tr.lock() {
+		defer tr.unlock()
+	}
 	tr.cow = new(cow)
 	tr2 := *tr
 	tr2.mu = new(sync.RWMutex)
 	tr2.cow = new(cow)
-	tr.mu.Unlock()
 	return &tr2
+}
+
+func (tr *BTree) lock() bool {
+	if tr.locks {
+		tr.mu.Lock()
+	}
+	return tr.locks
+}
+
+func (tr *BTree) unlock() {
+	tr.mu.Unlock()
+}
+
+func (tr *BTree) rlock() bool {
+	if tr.locks {
+		tr.mu.RLock()
+	}
+	return tr.locks
+}
+
+func (tr *BTree) runlock() {
+	tr.mu.RUnlock()
 }
