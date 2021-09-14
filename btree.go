@@ -86,6 +86,8 @@ func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 ) (index int16, found bool) {
 	low := int16(0)
 	high := n.numItems - 1
+	// Try using hint, best case finds the exact match, updates the hint and returns
+	// worst case, just updates the low and high bounds to binary search between.
 	if hint != nil && depth < 8 && hint.used[depth] {
 		index = int16(hint.path[depth])
 		if index >= n.numItems {
@@ -114,14 +116,24 @@ func (n *node) find(key interface{}, less func(a, b interface{}) bool,
 			goto path_match
 		}
 	}
+	// Do a binary search between low and high
+	// keep on going until low > high, where the guarantee on low is that
+	// key >= items[low - 1]
 	for low <= high {
 		mid := low + ((high+1)-low)/2
+		// if key >= n.items[mid], low = mid + 1
+		// which implies that key >= everything below low
 		if !less(key, n.items[mid]) {
 			low = mid + 1
 		} else {
 			high = mid - 1
 		}
 	}
+	// if low > 0, n.items[low - 1] >= key,
+	// we have from before that key >= n.items[low - 1]
+	// therefore key = n.items[low - 1],
+	// and we have found the entry for key.
+	// Otherwise we must keep searching for the key in index `low`.
 	if low > 0 && !less(n.items[low-1], key) {
 		index = low - 1
 		found = true
@@ -525,6 +537,8 @@ func (tr *BTree) Ascend(pivot interface{}, iter func(item interface{}) bool) {
 	}
 }
 
+// The return value of this function determines whether we should keep iterating
+// upon this functions return.
 func (n *node) ascend(pivot interface{}, less func(a, b interface{}) bool,
 	hint *PathHint, depth int, iter func(item interface{}) bool,
 ) bool {
@@ -536,6 +550,10 @@ func (n *node) ascend(pivot interface{}, less func(a, b interface{}) bool,
 			}
 		}
 	}
+	// We are either in the case that
+	// - node is found, we should iterate through it starting at `i`,
+	//   the index it was located at.
+	// - node is not found, and TODO: fill in.
 	for ; i < n.numItems; i++ {
 		if !iter(n.items[i]) {
 			return false
