@@ -151,6 +151,13 @@ GetHint(item, *hint)    # get an existing item
 DeleteHint(item, *hint) # delete an item
 ```
 
+### Array-like operations
+
+```
+GetAt(index)     # returns the value at index
+DeleteAt(index)  # deletes the item at index
+```
+
 ## Performance
 
 This implementation was designed with performance in mind. 
