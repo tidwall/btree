@@ -1,10 +1,4 @@
-// Copyright 2020 Joshua J Baker. All rights reserved.
-// Use of this source code is governed by an MIT-style
-// license that can be found in the LICENSE file.
-
 package btree
-
-// SEED=1603717878394178000 go test -run Random
 
 import (
 	"fmt"
@@ -13,8 +7,6 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
-	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,6 +20,7 @@ func init() {
 	if err != nil {
 		seed = time.Now().UnixNano()
 	}
+	// seed = 1637859071499249000
 	fmt.Printf("seed: %d\n", seed)
 	rand.Seed(seed)
 }
@@ -40,26 +33,13 @@ func randKeys(N int) (keys []string) {
 	return
 }
 
-//lint:ignore U1000 used for debugging
-func (tr *BTree) deepPrint() {
-	tr.root.deepPrint(1)
+type pair struct {
+	key   string
+	value interface{}
 }
 
-func (n *node) deepPrint(level int) {
-	if n == nil {
-		fmt.Printf("%v %#v\n", strings.Repeat("  ", level), n)
-		return
-	}
-	vals := fmt.Sprintf("%v ", strings.Repeat(">", level))
-	vals += fmt.Sprintf("%v", n.items[:n.numItems])
-	fmt.Printf("%-30s (count: %d)", vals, n.count)
-	fmt.Printf("\n")
-	if !n.leaf {
-		for i := int16(0); i < n.numItems; i++ {
-			n.children[i].deepPrint(level + 1)
-		}
-		n.children[n.numItems].deepPrint(level + 1)
-	}
+func pairLess(a, b interface{}) bool {
+	return a.(pair).key < b.(pair).key
 }
 
 func stringsEquals(a, b []string) bool {
@@ -72,15 +52,6 @@ func stringsEquals(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-type pair struct {
-	key   string
-	value interface{}
-}
-
-func pairLess(a, b interface{}) bool {
-	return a.(pair).key < b.(pair).key
 }
 
 func TestDescend(t *testing.T) {
@@ -181,8 +152,80 @@ func TestAscend(t *testing.T) {
 	}
 }
 
-func TestBTree(t *testing.T) {
+func TestSimpleRandom(t *testing.T) {
+	start := time.Now()
+	for time.Since(start) < time.Second*2 {
+		N := 100_000
+		items := make([]int, N)
+		for i := 0; i < N; i++ {
+			items[i] = rand.Int()
+		}
+		tr := New(func(a, b interface{}) bool { return a.(int) < b.(int) })
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if tr.Get(items[i]) != nil {
+				panic("!")
+			}
+			if tr.Set(items[i]) != nil {
+				panic("!")
+			}
+			if tr.Get(items[i]).(int) != items[i] {
+				panic("!")
+			}
+		}
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if tr.Set(items[i]).(int) != items[i] {
+				panic("!")
+			}
+		}
 
+		pivot := items[len(items)/2]
+		tr.Ascend(pivot, func(item interface{}) bool {
+			if item.(int) < pivot {
+				panic("!")
+			}
+			return true
+		})
+		min := -1
+		index := 0
+		tr.Ascend(nil, func(item interface{}) bool {
+			if index == len(items)/2 {
+				return false
+			}
+			if item.(int) < min {
+				panic("!")
+			}
+			min = item.(int)
+			index++
+			return true
+		})
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if tr.Delete(items[i]).(int) != items[i] {
+				panic("!")
+			}
+			if tr.Delete(items[i]) != nil {
+				panic("!")
+			}
+		}
+		if tr.Len() != 0 {
+			panic("!")
+		}
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if tr.Delete(items[i]) != nil {
+				panic("!")
+			}
+		}
+		tr.sane()
+		tr.Ascend(nil, func(item interface{}) bool {
+			panic("!")
+		})
+	}
+}
+
+func TestBTree(t *testing.T) {
 	N := 10000
 	tr := New(pairLess)
 	tr.sane()
@@ -282,7 +325,7 @@ func TestBTree(t *testing.T) {
 
 	// delete half the items
 	for _, key := range keys[:len(keys)/2] {
-		item := tr.Delete(pair{key, nil})
+		item = tr.Delete(pair{key, nil})
 		if item == nil {
 			t.Fatal("expected true")
 		}
@@ -342,7 +385,10 @@ func TestBTree(t *testing.T) {
 
 	// replace second half
 	for _, key := range keys[len(keys)/2:] {
+		// println("set >>", key)
+		// tr.print(func(v interface{}) string { return v.(pair).key })
 		item := tr.Set(pair{key, key})
+		// tr.print(func(v interface{}) string { return v.(pair).key })
 		tr.sane()
 		if item == nil {
 			t.Fatal("expected not nil")
@@ -392,85 +438,183 @@ func TestBTree(t *testing.T) {
 	}
 }
 
-func BenchmarkTidwallSequentialSet(b *testing.B) {
-	tr := New(intLess)
-	keys := rand.Perm(b.N)
-	sort.Ints(keys)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tr.Set(keys[i])
+// btree_sane returns true if the entire btree and every node are valid.
+// - height of all leaves are the equal to the btree height.
+// - deep count matches the btree count.
+// - all nodes have the correct number of items and counts.
+// - all items are in order.
+func (tr *BTree) sane() {
+	if tr == nil {
+		panic("nil tree")
+	}
+	if !tr.saneheight() {
+		panic("!sane-height")
+	}
+	if tr.Len() != tr.count || tr.deepcount() != tr.count {
+		panic("!sane-count")
+	}
+	if !tr.saneprops() {
+		panic("!sane-props")
+	}
+	if !tr.saneorder() {
+		panic("!sane-order")
+	}
+	if !tr.sanenils() {
+		panic("!sane-nils")
 	}
 }
 
-func BenchmarkTidwallSequentialGet(b *testing.B) {
-	tr := New(intLess)
-	keys := rand.Perm(b.N)
-	sort.Ints(keys)
-	for i := 0; i < b.N; i++ {
-		tr.Set(keys[i])
+// btree_saneheight returns true if the height of all leaves match the height
+// of the btree.
+func (tr *BTree) saneheight() bool {
+	height := tr.Height()
+	if tr.root != nil {
+		if height == 0 {
+			return false
+		}
+		return tr.root.saneheight(1, height)
 	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tr.Get(keys[i])
-	}
+	return height == 0
 }
 
-func BenchmarkTidwallRandomSet(b *testing.B) {
-	tr := New(intLess)
-	keys := rand.Perm(b.N)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tr.Set(keys[i])
+func (n *node) saneheight(height, maxheight int) bool {
+	if n.leaf() {
+		if height != maxheight {
+			return false
+		}
+	} else {
+		i := 0
+		for ; i < len(n.items); i++ {
+			if !(*n.children)[i].saneheight(height+1, maxheight) {
+				return false
+			}
+		}
+		if !(*n.children)[i].saneheight(height+1, maxheight) {
+			return false
+		}
 	}
+	return true
 }
 
-func BenchmarkTidwallRandomGet(b *testing.B) {
-	tr := New(intLess)
-	keys := rand.Perm(b.N)
-	for i := 0; i < b.N; i++ {
-		tr.Set(keys[i])
+// btree_deepcount returns the number of items in the btree.
+func (tr *BTree) deepcount() int {
+	if tr.root != nil {
+		return tr.root.deepcount()
 	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tr.Get(keys[i])
-	}
+	return 0
 }
 
-func BenchmarkTidwallSequentialSetHint(b *testing.B) {
-	tr := New(intLess)
-	keys := rand.Perm(b.N)
-	sort.Ints(keys)
-	b.ResetTimer()
-	var hint PathHint
-	for i := 0; i < b.N; i++ {
-		tr.SetHint(keys[i], &hint)
+func (n *node) deepcount() int {
+	count := len(n.items)
+	if !n.leaf() {
+		for i := 0; i <= len(n.items); i++ {
+			count += (*n.children)[i].deepcount()
+		}
 	}
+	if n.count != count {
+		panic("!node-count")
+	}
+	return count
 }
 
-func BenchmarkTidwallSequentialGetHint(b *testing.B) {
-	// println("\n----------------------------------------------------------------")
-	tr := New(intLess)
-	keys := rand.Perm(b.N)
-	sort.Ints(keys)
-	for i := 0; i < b.N; i++ {
-		tr.Set(keys[i])
+func (tr *BTree) nodesaneprops(n *node, height int) bool {
+	if height == 1 {
+		if len(n.items) < 1 || len(n.items) > maxItems {
+			println(len(n.items) < 1)
+			return false
+		}
+	} else {
+		if len(n.items) < minItems || len(n.items) > maxItems {
+			println(2)
+			return false
+		}
 	}
-	b.ResetTimer()
-	var hint PathHint
-	for i := 0; i < b.N; i++ {
-		tr.GetHint(keys[i], &hint)
-		// fmt.Printf("%064b\n", hint)
+	if !n.leaf() {
+		if len(*n.children) != len(n.items)+1 {
+			println(3)
+			return false
+		}
+		for i := 0; i < len(n.items); i++ {
+			if !tr.nodesaneprops((*n.children)[i], height+1) {
+				println(4)
+				return false
+			}
+		}
+		if !tr.nodesaneprops((*n.children)[len(n.items)], height+1) {
+			println(5)
+			return false
+		}
 	}
+	return true
 }
 
-func BenchmarkTidwallLoad(b *testing.B) {
-	tr := New(intLess)
-	keys := rand.Perm(b.N)
-	sort.Ints(keys)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		tr.Load(keys[i])
+func (tr *BTree) saneprops() bool {
+	if tr.root != nil {
+		return tr.nodesaneprops(tr.root, 1)
 	}
+	return true
+}
+
+func (n *node) sanenils() bool {
+	for i := 0; i < len(n.items); i++ {
+		if n.items[i] == nil {
+			return false
+		}
+	}
+	items := n.items[:cap(n.items):cap(n.items)]
+	for i := len(n.items); i < len(items); i++ {
+		if items[i] != nil {
+			return false
+		}
+	}
+	if !n.leaf() {
+		for i := 0; i < len(*n.children); i++ {
+			if (*n.children)[i] == nil {
+				return false
+			}
+		}
+		children := (*n.children)[:cap(*n.children):cap(*n.children)]
+		for i := len(*n.children); i < len(children); i++ {
+			if children[i] != nil {
+				return false
+			}
+		}
+		for i := 0; i < len(*n.children); i++ {
+			if !(*n.children)[i].sanenils() {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (tr *BTree) sanenils() bool {
+	if tr.root != nil {
+		return tr.root.sanenils()
+	}
+	return true
+}
+
+func (tr *BTree) saneorder() bool {
+	var last interface{}
+	var count int
+	var bad bool
+	tr.Walk(func(items []interface{}) {
+		for _, item := range items {
+			if bad {
+				return
+			}
+			if last != nil {
+				if !tr.less(last, item) {
+					bad = true
+					return
+				}
+			}
+			last = item
+			count++
+		}
+	})
+	return !bad && count == tr.count
 }
 
 func TestBTreeOne(t *testing.T) {
@@ -518,6 +662,7 @@ func TestBTree256(t *testing.T) {
 		}
 	}
 }
+
 func shuffle(r *rand.Rand, keys []int) {
 	for i := range keys {
 		j := r.Intn(i + 1)
@@ -858,312 +1003,6 @@ func TestRandom(t *testing.T) {
 	}()
 }
 
-func (n *node) saneheight(height, maxheight int) bool {
-	if n.leaf {
-		if height != maxheight {
-			return false
-		}
-	} else {
-		i := int16(0)
-		for ; i < n.numItems; i++ {
-			if !n.children[i].saneheight(height+1, maxheight) {
-				return false
-			}
-		}
-		if !n.children[i].saneheight(height+1, maxheight) {
-			return false
-		}
-	}
-	return true
-}
-
-// btree_saneheight returns true if the height of all leaves match the height
-// of the btree.
-func (tr *BTree) saneheight() bool {
-	height := tr.Height()
-	if tr.root != nil {
-		if height == 0 {
-			return false
-		}
-		return tr.root.saneheight(1, height)
-	}
-	return height == 0
-}
-
-func (n *node) deepcount() int {
-	count := int(n.numItems)
-	if !n.leaf {
-		for i := int16(0); i <= n.numItems; i++ {
-			count += n.children[i].deepcount()
-		}
-	}
-	if n.count != count {
-		panic("!node-count")
-	}
-	return count
-}
-
-// btree_deepcount returns the number of items in the btree.
-func (tr *BTree) deepcount() int {
-	if tr.root != nil {
-		return tr.root.deepcount()
-	}
-	return 0
-}
-
-func (tr *BTree) nodesaneprops(n *node, height int) bool {
-	if height == 1 {
-		if n.numItems < 1 || n.numItems > maxItems {
-			return false
-		}
-	} else {
-		if n.numItems < minItems || n.numItems > maxItems {
-			return false
-		}
-	}
-	if !n.leaf {
-		for i := int16(0); i < n.numItems; i++ {
-			if !tr.nodesaneprops(n.children[i], height+1) {
-				return false
-			}
-		}
-		if !tr.nodesaneprops(n.children[n.numItems], height+1) {
-			return false
-		}
-	}
-	return true
-}
-
-func (tr *BTree) saneprops() bool {
-	if tr.root != nil {
-		return tr.nodesaneprops(tr.root, 1)
-	}
-	return true
-}
-
-func (n *node) sanenils() bool {
-	for i := 0; i < int(n.numItems); i++ {
-		if n.items[i] == nil {
-			return false
-		}
-	}
-	for i := int(n.numItems); i < len(n.items); i++ {
-		if n.items[i] != nil {
-			return false
-		}
-	}
-	if !n.leaf {
-		for i := 0; i <= int(n.numItems); i++ {
-			if n.children[i] == nil {
-				return false
-			}
-			if !n.children[i].sanenils() {
-				return false
-			}
-		}
-		for i := int(n.numItems) + 1; i < len(n.children); i++ {
-			if n.children[i] != nil {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-func (tr *BTree) sanenils() bool {
-	if tr.root != nil {
-		return tr.root.sanenils()
-	}
-	return true
-}
-
-func (tr *BTree) saneorder() bool {
-	var last interface{}
-	var count int
-	var bad bool
-	tr.Walk(func(items []interface{}) {
-		for _, item := range items {
-			if bad {
-				return
-			}
-			if last != nil {
-				if !tr.less(last, item) {
-					bad = true
-					return
-				}
-			}
-			last = item
-			count++
-		}
-	})
-	return !bad && count == tr.count
-}
-
-// btree_sane returns true if the entire btree and every node are valid.
-// - height of all leaves are the equal to the btree height.
-// - deep count matches the btree count.
-// - all nodes have the correct number of items and counts.
-// - all items are in order.
-func (tr *BTree) sane() {
-	if tr == nil {
-		panic("nil tree")
-	}
-	if !tr.saneheight() {
-		panic("!sane-height")
-	}
-	if tr.Len() != tr.count || tr.deepcount() != tr.count {
-		panic("!sane-count")
-	}
-	if !tr.saneprops() {
-		panic("!sane-props")
-	}
-	if !tr.saneorder() {
-		panic("!sane-order")
-	}
-	if !tr.sanenils() {
-		panic("!sane-nils")
-	}
-}
-
-type copyItem struct {
-	depth int
-	key   int
-	value int
-}
-
-func copyItemLess(a, b interface{}) bool {
-	return a.(copyItem).key < b.(copyItem).key
-}
-
-func testCopyUpdates(tr *BTree, depth, value int,
-	numItems, numCopies int, maxDepth int, wg *sync.WaitGroup,
-) {
-	defer wg.Done()
-	orgLen := tr.Len()
-
-	var wg2 int32
-	if depth < maxDepth {
-		wg2 = int32(numCopies)
-		wg.Add(numCopies)
-		for i := 0; i < numCopies; i++ {
-			go func(tr *BTree, depth, value int) {
-				defer func() {
-					atomic.AddInt32(&wg2, -1)
-					wg.Done()
-				}()
-
-				// here we can run operations on the new tree
-				// delete a bunch of items
-				for _, i := range rand.Perm(numItems / 3) {
-					v := tr.Delete(copyItem{key: i})
-					if v.(copyItem).key != i {
-						panic("invalid")
-					}
-				}
-
-				// add random items with big keys
-				randItems := make([]copyItem, numItems/3)
-				for i, key := range rand.Perm(len(randItems)) {
-					key = 100_000_000 + key
-					randItems[i] = copyItem{key: key, depth: -1, value: -2}
-					v := tr.Load(randItems[i])
-					if v != nil {
-						panic("invalid")
-					}
-				}
-
-				// popmax 10
-				for i := 0; i < 10; i++ {
-					n := tr.Len()
-					if tr.PopMax() == nil {
-						if n != 0 {
-							panic("invalid")
-						}
-					}
-				}
-
-				// popmin 10
-				for i := 0; i < 10; i++ {
-					n := tr.Len()
-					if tr.PopMin() == nil {
-						if n != 0 {
-							panic("invalid")
-						}
-					}
-				}
-
-				// delete the random items
-				for _, key := range randItems {
-					tr.Delete(key)
-				}
-
-				// reset all of the items
-				nvalue := rand.Int()
-				for _, key := range rand.Perm(orgLen) {
-					tr.Set(copyItem{key: key, value: nvalue, depth: depth})
-				}
-
-				wg.Add(1)
-				go testCopyUpdates(tr, depth, nvalue,
-					numItems, numCopies, maxDepth, wg)
-
-			}(tr.Copy(), depth+1, value)
-		}
-	}
-
-	// This loop runs hot, there's a gosched at the bottom to relieve pressure.
-	for {
-		tr.sane()
-		var items []copyItem
-		tr.Ascend(nil, func(item interface{}) bool {
-			items = append(items, item.(copyItem))
-			return true
-		})
-		sort.SliceIsSorted(items, func(i, j int) bool {
-			return copyItemLess(items[i], items[j])
-		})
-		if len(items) != numItems {
-			panic(fmt.Sprintf("expected '%d', got '%d'", numItems, len(items)))
-		}
-		if len(items) != orgLen {
-			panic(fmt.Sprintf("expected '%d', got '%d'", orgLen, len(items)))
-		}
-		if tr.Len() != orgLen {
-			panic(fmt.Sprintf("expected '%d', got '%d'", orgLen, tr.Len()))
-		}
-		for i, ci := range items {
-			ci2 := copyItem{depth: depth, value: value, key: i}
-			if ci != ci2 {
-				panic(fmt.Sprintf("expected %#v, got %#v", ci2, ci))
-			}
-		}
-		if atomic.LoadInt32(&wg2) == 0 {
-			break
-		}
-		runtime.Gosched()
-	}
-}
-
-// TestCopy tests the Copy function and performs lots of operations on a bunch
-// of random btrees. This can be run with -race flag, but it may be very slow.
-func TestCopy(t *testing.T) {
-	start := time.Now()
-	for time.Since(start) < time.Second*5 {
-		maxDepth := rand.Intn(5)      // max goroutine depth
-		numCopies := rand.Intn(5)     // number of copies to make per depth
-		numItems := rand.Intn(10_000) // number of original items
-		nvalue := rand.Int()
-		tr := New(copyItemLess)
-		for _, key := range rand.Perm(numItems) {
-			tr.Set(copyItem{key: key, depth: 0, value: nvalue})
-		}
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go testCopyUpdates(tr, 0, nvalue, numItems, numCopies, maxDepth, &wg)
-		wg.Wait()
-	}
-}
-
 func TestLess(t *testing.T) {
 	tr := New(intLess)
 	if !tr.Less(1, 2) {
@@ -1196,4 +1035,182 @@ func TestDeleteAt(t *testing.T) {
 		}
 		tr.sane()
 	}
+}
+
+func randInts(N int) []int {
+	ints := make([]int, N)
+	for i := 0; i < N; i++ {
+		ints[i] = rand.Int()
+	}
+	return ints
+}
+
+func TestCopy(t *testing.T) {
+	items := randInts(100000)
+	itemsM := make(map[int]bool)
+	for i := 0; i < len(items); i++ {
+		itemsM[items[i]] = true
+	}
+	tr := New(func(a, b interface{}) bool { return a.(int) < b.(int) })
+	for i := 0; i < len(items); i++ {
+		tr.Set(items[i])
+	}
+	var wait int32
+	var testCopyDeep func(tr *BTree, parent bool)
+
+	testCopyDeep = func(tr *BTree, parent bool) {
+		defer func() { atomic.AddInt32(&wait, -1) }()
+		if parent {
+			// 2 grandchildren
+			for i := 0; i < 2; i++ {
+				atomic.AddInt32(&wait, 1)
+				go testCopyDeep(tr.Copy(), false)
+			}
+		}
+
+		items2 := make([]int, 10000)
+		for i := 0; i < len(items2); i++ {
+			x := rand.Int()
+			for itemsM[x] {
+				x = rand.Int()
+			}
+			items2[i] = x
+		}
+		for i := 0; i < len(items2); i++ {
+			if tr.Set(items2[i]) != nil {
+				panic("!")
+			}
+		}
+		tr.sane()
+		if tr.Len() != len(items)+len(items2) {
+			panic("!")
+		}
+		for i := 0; i < len(items); i++ {
+			if tr.Get(items[i]).(int) != items[i] {
+				panic("!")
+			}
+		}
+		for i := 0; i < len(items2); i++ {
+			if tr.Get(items2[i]).(int) != items2[i] {
+				panic("!")
+			}
+		}
+
+		for i := 0; i < len(items); i++ {
+			if tr.Delete(items[i]).(int) != items[i] {
+				panic("!")
+			}
+		}
+		tr.sane()
+		if tr.Len() != len(items2) {
+			panic("!")
+		}
+		for i := 0; i < len(items2); i++ {
+			if tr.Get(items2[i]).(int) != items2[i] {
+				panic("!")
+			}
+		}
+		sort.Ints(items2)
+		var i int
+		for len(items2) > 0 {
+			if i%2 == 0 {
+				if tr.PopMin().(int) != items2[0] {
+					panic("!")
+				}
+				items2 = items2[1:]
+			} else {
+				if tr.PopMax().(int) != items2[len(items2)-1] {
+					panic("!")
+				}
+				items2 = items2[:len(items2)-1]
+			}
+			if i%123 == 0 {
+				tr.sane()
+				if tr.Len() != len(items2) {
+					panic("!")
+				}
+				for i := 0; i < len(items2); i++ {
+					if tr.Get(items2[i]).(int) != items2[i] {
+						panic("!")
+					}
+				}
+			}
+			i++
+		}
+		tr.sane()
+		if tr.Len() != len(items2) {
+			panic("!")
+		}
+	}
+
+	// 10 children
+	for i := 0; i < 10; i++ {
+		atomic.AddInt32(&wait, 1)
+		go testCopyDeep(tr.Copy(), true)
+	}
+
+	for atomic.LoadInt32(&wait) > 0 {
+		tr.sane()
+		if tr.Len() != len(items) {
+			panic("!")
+		}
+		for i := 0; i < len(items); i++ {
+			if tr.Get(items[i]).(int) != items[i] {
+				panic("!")
+			}
+		}
+		runtime.Gosched()
+	}
+}
+
+func TestVarious(t *testing.T) {
+	N := 1_000_000
+	tr := NewNonConcurrent(func(a, b interface{}) bool {
+		return a.(int) < b.(int)
+	})
+	var hint PathHint
+	for _, i := range rand.Perm(N) {
+		if tr.SetHint(i, &hint) != nil {
+			panic("!")
+		}
+	}
+	for _, i := range rand.Perm(N) {
+		if tr.GetHint(i, &hint).(int) != i {
+			panic("!")
+		}
+	}
+	for _, i := range rand.Perm(N) {
+		if tr.DeleteHint(i, &hint).(int) != i {
+			panic("!")
+		}
+	}
+
+	if tr.DeleteAt(0) != nil {
+		panic("!")
+	}
+	if tr.GetAt(0) != nil {
+		panic("!")
+	}
+	for i := 0; i < N; i++ {
+		if tr.SetHint(i, &hint) != nil {
+			panic("!")
+		}
+		if tr.SetHint(i, &hint).(int) != i {
+			panic("!")
+		}
+		if tr.SetHint(i, &hint).(int) != i {
+			panic("!")
+		}
+	}
+	for i := 0; i < N; i++ {
+		if tr.GetHint(i, &hint).(int) != i {
+			panic("!")
+		}
+	}
+	for i := 0; i < N; i++ {
+		if tr.DeleteHint(i, &hint).(int) != i {
+			panic("!")
+		}
+	}
+
 }
