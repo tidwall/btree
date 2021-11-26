@@ -115,10 +115,6 @@ func (tr *BTree) find(n *node, key interface{},
 			if tr.less(n.items[len(n.items)-1], key) {
 				index = len(n.items)
 				goto path_match
-			} else if !tr.less(key, n.items[len(n.items)-1]) {
-				index = len(n.items) - 1
-				found = true
-				goto path_match
 			}
 			index = len(n.items) - 1
 		}
@@ -165,10 +161,17 @@ func (tr *BTree) find(n *node, key interface{},
 path_match:
 	if depth < 8 {
 		hint.used[depth] = true
+		var pathIndex uint8
 		if n.leaf() && found {
-			hint.path[depth] = uint8(index + 1)
+			pathIndex = uint8(index + 1)
 		} else {
-			hint.path[depth] = uint8(index)
+			pathIndex = uint8(index)
+		}
+		if pathIndex != hint.path[depth] {
+			hint.path[depth] = pathIndex
+			for i := depth + 1; i < 8; i++ {
+				hint.used[i] = false
+			}
 		}
 	}
 	return index, found
