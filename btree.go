@@ -91,7 +91,7 @@ func (tr *BTree) find(n *node, key interface{},
 		high := len(n.items)
 		for low < high {
 			mid := (low + high) / 2
-			if !tr.Less(key, n.items[mid]) {
+			if !tr.less(key, n.items[mid]) {
 				low = mid + 1
 			} else {
 				high = mid
