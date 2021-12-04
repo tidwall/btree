@@ -23,6 +23,12 @@ const degree = 128
 // the type, rather than creating an entirely new type.
 type kind = interface{}
 
+// BTree alias
+// This is an alias to the local bTree type, which exports it for public use
+// at a package level.
+// Comment out this line to keep the library private.
+type BTree = bTree
+
 // less returns true if A is less than B.
 // The value of context will be whatever was passed to NewOptions through the
 // Options.Context field, otherwise nil if the field was not set.
@@ -49,7 +55,7 @@ func testMakeItem(x int) (item kind) {
 }
 
 // testNewBTree must return an operational btree for testing.
-func testNewBTree() *BTree {
+func testNewBTree() *bTree {
 	return NewOptions(Options{
 		Context: func(a, b interface{}) bool {
 			if a == nil {
@@ -71,7 +77,7 @@ func testNewBTree() *BTree {
 const maxItems = degree*2 - 1        // max items per node. max children is +1
 const minItems = maxItems * 40 / 100 // min items per node. 40% the max
 
-type BTree struct {
+type bTree struct {
 	mu    *sync.RWMutex
 	cow   *cow
 	root  *node
@@ -92,7 +98,7 @@ type cow struct {
 	_ int // cannot be an empty struct
 }
 
-func (tr *BTree) newNode(leaf bool) *node {
+func (tr *bTree) newNode(leaf bool) *node {
 	n := &node{cow: tr.cow}
 	if !leaf {
 		n.children = new([]*node)
@@ -118,12 +124,12 @@ type Options struct {
 }
 
 // New returns a new BTree
-func New() *BTree {
+func New() *bTree {
 	return NewOptions(Options{})
 }
 
-func NewOptions(opts Options) *BTree {
-	tr := new(BTree)
+func NewOptions(opts Options) *bTree {
+	tr := new(bTree)
 	tr.cow = new(cow)
 	tr.mu = new(sync.RWMutex)
 	tr.ctx = opts.Context
@@ -133,11 +139,11 @@ func NewOptions(opts Options) *BTree {
 
 // Less is a convenience function that performs a comparison of two items
 // using the same "less" function provided to New.
-func (tr *BTree) Less(a, b kind) bool {
+func (tr *bTree) Less(a, b kind) bool {
 	return less(a, b, tr.ctx)
 }
 
-func (tr *BTree) find(n *node, key kind,
+func (tr *bTree) find(n *node, key kind,
 	hint *PathHint, depth int,
 ) (index int, found bool) {
 	if hint == nil {
@@ -233,14 +239,14 @@ path_match:
 }
 
 // SetHint sets or replace a value for a key using a path hint
-func (tr *BTree) SetHint(item kind, hint *PathHint) (prev kind, replaced bool) {
+func (tr *bTree) SetHint(item kind, hint *PathHint) (prev kind, replaced bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
 	return tr.setHint(item, hint)
 }
 
-func (tr *BTree) setHint(item kind, hint *PathHint) (prev kind, replaced bool) {
+func (tr *bTree) setHint(item kind, hint *PathHint) (prev kind, replaced bool) {
 	if tr.root == nil {
 		tr.root = tr.newNode(true)
 		tr.root.items = append([]kind{}, item)
@@ -267,11 +273,11 @@ func (tr *BTree) setHint(item kind, hint *PathHint) (prev kind, replaced bool) {
 }
 
 // Set or replace a value for a key
-func (tr *BTree) Set(item kind) (kind, bool) {
+func (tr *bTree) Set(item kind) (kind, bool) {
 	return tr.SetHint(item, nil)
 }
 
-func (tr *BTree) nodeSplit(n *node) (right *node, median kind) {
+func (tr *bTree) nodeSplit(n *node) (right *node, median kind) {
 	i := maxItems / 2
 	median = n.items[i]
 
@@ -312,7 +318,7 @@ func (n *node) updateCount() {
 // called outside of heavy copy-on-write situations. Marking it "noinline"
 // allows for the parent cowLoad to be inlined.
 // go:noinline
-func (tr *BTree) copy(n *node) *node {
+func (tr *bTree) copy(n *node) *node {
 	n2 := new(node)
 	n2.cow = tr.cow
 	n2.count = n.count
@@ -327,14 +333,14 @@ func (tr *BTree) copy(n *node) *node {
 }
 
 // cowLoad loads the provided node and, if needed, performs a copy-on-write.
-func (tr *BTree) cowLoad(cn **node) *node {
+func (tr *bTree) cowLoad(cn **node) *node {
 	if (*cn).cow != tr.cow {
 		*cn = tr.copy(*cn)
 	}
 	return *cn
 }
 
-func (tr *BTree) nodeSet(cn **node, item kind,
+func (tr *bTree) nodeSet(cn **node, item kind,
 	hint *PathHint, depth int,
 ) (prev kind, replaced bool, split bool) {
 	n := tr.cowLoad(cn)
@@ -374,7 +380,7 @@ func (tr *BTree) nodeSet(cn **node, item kind,
 	return prev, replaced, false
 }
 
-func (tr *BTree) Scan(iter func(item kind) bool) {
+func (tr *bTree) Scan(iter func(item kind) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -405,12 +411,12 @@ func (n *node) scan(iter func(item kind) bool) bool {
 }
 
 // Get a value for key
-func (tr *BTree) Get(key kind) (kind, bool) {
+func (tr *bTree) Get(key kind) (kind, bool) {
 	return tr.GetHint(key, nil)
 }
 
 // GetHint gets a value for key using a path hint
-func (tr *BTree) GetHint(key kind, hint *PathHint) (kind, bool) {
+func (tr *bTree) GetHint(key kind, hint *PathHint) (kind, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -433,24 +439,24 @@ func (tr *BTree) GetHint(key kind, hint *PathHint) (kind, bool) {
 }
 
 // Len returns the number of items in the tree
-func (tr *BTree) Len() int {
+func (tr *bTree) Len() int {
 	return tr.count
 }
 
 // Delete a value for a key
-func (tr *BTree) Delete(key kind) (kind, bool) {
+func (tr *bTree) Delete(key kind) (kind, bool) {
 	return tr.DeleteHint(key, nil)
 }
 
 // DeleteHint deletes a value for a key using a path hint
-func (tr *BTree) DeleteHint(key kind, hint *PathHint) (kind, bool) {
+func (tr *bTree) DeleteHint(key kind, hint *PathHint) (kind, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
 	return tr.deleteHint(key, hint)
 }
 
-func (tr *BTree) deleteHint(key kind, hint *PathHint) (kind, bool) {
+func (tr *bTree) deleteHint(key kind, hint *PathHint) (kind, bool) {
 	if tr.root == nil {
 		return tr.empty, false
 	}
@@ -468,7 +474,7 @@ func (tr *BTree) deleteHint(key kind, hint *PathHint) (kind, bool) {
 	return prev, true
 }
 
-func (tr *BTree) delete(cn **node, max bool, key kind,
+func (tr *bTree) delete(cn **node, max bool, key kind,
 	hint *PathHint, depth int,
 ) (kind, bool) {
 	n := tr.cowLoad(cn)
@@ -521,7 +527,7 @@ func (tr *BTree) delete(cn **node, max bool, key kind,
 // nodeRebalance rebalances the child nodes following a delete operation.
 // Provide the index of the child node with the number of items that fell
 // below minItems.
-func (tr *BTree) nodeRebalance(n *node, i int) {
+func (tr *bTree) nodeRebalance(n *node, i int) {
 	if i == len(n.items) {
 		i--
 	}
@@ -604,7 +610,7 @@ func (tr *BTree) nodeRebalance(n *node, i int) {
 // Ascend the tree within the range [pivot, last]
 // Pass nil for pivot to scan all item in ascending order
 // Return false to stop iterating
-func (tr *BTree) Ascend(pivot kind, iter func(item kind) bool) {
+func (tr *bTree) Ascend(pivot kind, iter func(item kind) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -616,7 +622,7 @@ func (tr *BTree) Ascend(pivot kind, iter func(item kind) bool) {
 
 // The return value of this function determines whether we should keep iterating
 // upon this functions return.
-func (tr *BTree) ascend(n *node, pivot kind,
+func (tr *bTree) ascend(n *node, pivot kind,
 	hint *PathHint, depth int, iter func(item kind) bool,
 ) bool {
 	i, found := tr.find(n, pivot, hint, depth)
@@ -644,7 +650,7 @@ func (tr *BTree) ascend(n *node, pivot kind,
 	return true
 }
 
-func (tr *BTree) Reverse(iter func(item kind) bool) {
+func (tr *bTree) Reverse(iter func(item kind) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -680,7 +686,7 @@ func (n *node) reverse(iter func(item kind) bool) bool {
 // Descend the tree within the range [pivot, first]
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
-func (tr *BTree) Descend(pivot kind, iter func(item kind) bool) {
+func (tr *bTree) Descend(pivot kind, iter func(item kind) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -690,7 +696,7 @@ func (tr *BTree) Descend(pivot kind, iter func(item kind) bool) {
 	tr.descend(tr.root, pivot, nil, 0, iter)
 }
 
-func (tr *BTree) descend(n *node, pivot kind,
+func (tr *bTree) descend(n *node, pivot kind,
 	hint *PathHint, depth int, iter func(item kind) bool,
 ) bool {
 	i, found := tr.find(n, pivot, hint, depth)
@@ -716,7 +722,7 @@ func (tr *BTree) descend(n *node, pivot kind,
 }
 
 // Load is for bulk loading pre-sorted items
-func (tr *BTree) Load(item kind) (kind, bool) {
+func (tr *bTree) Load(item kind) (kind, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -752,7 +758,7 @@ func (tr *BTree) Load(item kind) (kind, bool) {
 
 // Min returns the minimum item in tree.
 // Returns nil if the tree has no items.
-func (tr *BTree) Min() (kind, bool) {
+func (tr *bTree) Min() (kind, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -770,7 +776,7 @@ func (tr *BTree) Min() (kind, bool) {
 
 // Max returns the maximum item in tree.
 // Returns nil if the tree has no items.
-func (tr *BTree) Max() (kind, bool) {
+func (tr *bTree) Max() (kind, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -788,7 +794,7 @@ func (tr *BTree) Max() (kind, bool) {
 
 // PopMin removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
-func (tr *BTree) PopMin() (kind, bool) {
+func (tr *bTree) PopMin() (kind, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -829,7 +835,7 @@ func (tr *BTree) PopMin() (kind, bool) {
 
 // PopMax removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
-func (tr *BTree) PopMax() (kind, bool) {
+func (tr *bTree) PopMax() (kind, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -869,7 +875,7 @@ func (tr *BTree) PopMax() (kind, bool) {
 
 // GetAt returns the value at index.
 // Return nil if the tree is empty or the index is out of bounds.
-func (tr *BTree) GetAt(index int) (kind, bool) {
+func (tr *bTree) GetAt(index int) (kind, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -896,7 +902,7 @@ func (tr *BTree) GetAt(index int) (kind, bool) {
 
 // DeleteAt deletes the item at index.
 // Return nil if the tree is empty or the index is out of bounds.
-func (tr *BTree) DeleteAt(index int) (kind, bool) {
+func (tr *bTree) DeleteAt(index int) (kind, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -958,7 +964,7 @@ outer:
 
 // Height returns the height of the tree.
 // Returns zero if tree has no items.
-func (tr *BTree) Height() int {
+func (tr *bTree) Height() int {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -978,7 +984,7 @@ func (tr *BTree) Height() int {
 
 // Walk iterates over all items in tree, in order.
 // The items param will contain one or more items.
-func (tr *BTree) Walk(iter func(item []kind) bool) {
+func (tr *bTree) Walk(iter func(item []kind) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -1006,36 +1012,36 @@ func (n *node) walk(iter func(item []kind) bool) bool {
 
 // Copy the tree. This is a copy-on-write operation and is very fast because
 // it only performs a shadowed copy.
-func (tr *BTree) Copy() *BTree {
+func (tr *bTree) Copy() *bTree {
 	if tr.lock() {
 		defer tr.unlock()
 	}
 	tr.cow = new(cow)
-	tr2 := new(BTree)
+	tr2 := new(bTree)
 	*tr2 = *tr
 	tr2.mu = new(sync.RWMutex)
 	tr2.cow = new(cow)
 	return tr2
 }
 
-func (tr *BTree) lock() bool {
+func (tr *bTree) lock() bool {
 	if tr.locks {
 		tr.mu.Lock()
 	}
 	return tr.locks
 }
 
-func (tr *BTree) unlock() {
+func (tr *bTree) unlock() {
 	tr.mu.Unlock()
 }
 
-func (tr *BTree) rlock() bool {
+func (tr *bTree) rlock() bool {
 	if tr.locks {
 		tr.mu.RLock()
 	}
 	return tr.locks
 }
 
-func (tr *BTree) runlock() {
+func (tr *bTree) runlock() {
 	tr.mu.RUnlock()
 }

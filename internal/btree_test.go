@@ -810,9 +810,9 @@ func TestCopy(t *testing.T) {
 		tr.Set(items[i])
 	}
 	var wait int32
-	var testCopyDeep func(tr *BTree, parent bool)
+	var testCopyDeep func(tr *bTree, parent bool)
 
-	testCopyDeep = func(tr *BTree, parent bool) {
+	testCopyDeep = func(tr *bTree, parent bool) {
 		defer func() { atomic.AddInt32(&wait, -1) }()
 		if parent {
 			// 2 grandchildren
@@ -983,7 +983,7 @@ func TestVarious(t *testing.T) {
 	}
 }
 
-func (tr *BTree) sane() {
+func (tr *bTree) sane() {
 	if err := tr.Sane(); err != nil {
 		panic(err)
 	}
@@ -1000,7 +1000,7 @@ func (err saneError) Error() string {
 // - deep count matches the btree count.
 // - all nodes have the correct number of items and counts.
 // - all items are in order.
-func (tr *BTree) Sane() error {
+func (tr *bTree) Sane() error {
 	if tr == nil {
 		return nil
 	}
@@ -1024,7 +1024,7 @@ func (tr *BTree) Sane() error {
 
 // btree_saneheight returns true if the height of all leaves match the height
 // of the btree.
-func (tr *BTree) saneheight() bool {
+func (tr *bTree) saneheight() bool {
 	height := tr.Height()
 	if tr.root != nil {
 		if height == 0 {
@@ -1055,7 +1055,7 @@ func (n *node) saneheight(height, maxheight int) bool {
 }
 
 // btree_deepcount returns the number of items in the btree.
-func (tr *BTree) deepcount() int {
+func (tr *bTree) deepcount() int {
 	if tr.root != nil {
 		return tr.root.deepcount()
 	}
@@ -1075,7 +1075,7 @@ func (n *node) deepcount() int {
 	return count
 }
 
-func (tr *BTree) nodesaneprops(n *node, height int) bool {
+func (tr *bTree) nodesaneprops(n *node, height int) bool {
 	if height == 1 {
 		if len(n.items) < 1 || len(n.items) > maxItems {
 			println(len(n.items) < 1)
@@ -1106,14 +1106,14 @@ func (tr *BTree) nodesaneprops(n *node, height int) bool {
 	return true
 }
 
-func (tr *BTree) saneprops() bool {
+func (tr *bTree) saneprops() bool {
 	if tr.root != nil {
 		return tr.nodesaneprops(tr.root, 1)
 	}
 	return true
 }
 
-func (tr *BTree) sanenilsnode(n *node) bool {
+func (tr *bTree) sanenilsnode(n *node) bool {
 	items := n.items[:cap(n.items):cap(n.items)]
 	for i := len(n.items); i < len(items); i++ {
 		if items[i] != tr.empty {
@@ -1144,14 +1144,14 @@ func (tr *BTree) sanenilsnode(n *node) bool {
 // sanenils checks that all the slots in the item slice that are not used,
 //   n.items[len(n.items):cap(n.items):cap(n.items)]
 // are equal to the empty value of the kind.
-func (tr *BTree) sanenils() bool {
+func (tr *bTree) sanenils() bool {
 	if tr.root != nil {
 		return tr.sanenilsnode(tr.root)
 	}
 	return true
 }
 
-func (tr *BTree) saneorder() bool {
+func (tr *bTree) saneorder() bool {
 	var last kind
 	var count int
 	var bad bool
