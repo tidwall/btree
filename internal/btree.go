@@ -27,18 +27,23 @@ type kind = interface{}
 // less function
 type contextKind = interface{}
 
-// BTree alias
-// This is an alias to the local bTree type, which exports it for public use
-// at a package level.
-// Comment out this line to keep the library private.
-type BTree = bTree
-
 // less returns true if A is less than B.
 // The value of context will be whatever was passed to NewOptions through the
 // Options.Context field, otherwise nil if the field was not set.
 func less(a, b kind, context contextKind) bool {
 	return context.(func(a, b contextKind) bool)(a, b)
 }
+
+// BTree aliases
+// These are aliases to the local bTree types and functions, which are exported
+// to allow for public use at a package level.
+// Rename them if desired, or comment them out to make the library private.
+type BTree = bTree
+type Options = bOptions
+type PathHint = bPathHint
+
+func New() *bTree                     { return bNew() }
+func NewOptions(opts bOptions) *bTree { return bNewOptions(opts) }
 
 // The functions below, which begin with "test*", are required by the
 // btree_test.go file. If you choose not use include the btree_test.go file in
@@ -60,7 +65,7 @@ func testMakeItem(x int) (item kind) {
 
 // testNewBTree must return an operational btree for testing.
 func testNewBTree() *bTree {
-	return NewOptions(Options{
+	return bNewOptions(bOptions{
 		Context: func(a, b contextKind) bool {
 			if a == nil {
 				return b != nil
@@ -117,22 +122,22 @@ func (n *node) leaf() bool {
 
 // PathHint is a utility type used with the *Hint() functions. Hints provide
 // faster operations for clustered keys.
-type PathHint struct {
+type bPathHint struct {
 	used [8]bool
 	path [8]uint8
 }
 
-type Options struct {
+type bOptions struct {
 	NoLocks bool
 	Context contextKind
 }
 
 // New returns a new BTree
-func New() *bTree {
-	return NewOptions(Options{})
+func bNew() *bTree {
+	return bNewOptions(bOptions{})
 }
 
-func NewOptions(opts Options) *bTree {
+func bNewOptions(opts bOptions) *bTree {
 	tr := new(bTree)
 	tr.cow = new(cow)
 	tr.mu = new(sync.RWMutex)
@@ -148,7 +153,7 @@ func (tr *bTree) Less(a, b kind) bool {
 }
 
 func (tr *bTree) find(n *node, key kind,
-	hint *PathHint, depth int,
+	hint *bPathHint, depth int,
 ) (index int, found bool) {
 	if hint == nil {
 		// fast path for no hinting
@@ -243,14 +248,14 @@ path_match:
 }
 
 // SetHint sets or replace a value for a key using a path hint
-func (tr *bTree) SetHint(item kind, hint *PathHint) (prev kind, replaced bool) {
+func (tr *bTree) SetHint(item kind, hint *bPathHint) (prev kind, replaced bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
 	return tr.setHint(item, hint)
 }
 
-func (tr *bTree) setHint(item kind, hint *PathHint) (prev kind, replaced bool) {
+func (tr *bTree) setHint(item kind, hint *bPathHint) (prev kind, replaced bool) {
 	if tr.root == nil {
 		tr.root = tr.newNode(true)
 		tr.root.items = append([]kind{}, item)
@@ -345,7 +350,7 @@ func (tr *bTree) cowLoad(cn **node) *node {
 }
 
 func (tr *bTree) nodeSet(cn **node, item kind,
-	hint *PathHint, depth int,
+	hint *bPathHint, depth int,
 ) (prev kind, replaced bool, split bool) {
 	n := tr.cowLoad(cn)
 	i, found := tr.find(n, item, hint, depth)
@@ -420,7 +425,7 @@ func (tr *bTree) Get(key kind) (kind, bool) {
 }
 
 // GetHint gets a value for key using a path hint
-func (tr *bTree) GetHint(key kind, hint *PathHint) (kind, bool) {
+func (tr *bTree) GetHint(key kind, hint *bPathHint) (kind, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -453,14 +458,14 @@ func (tr *bTree) Delete(key kind) (kind, bool) {
 }
 
 // DeleteHint deletes a value for a key using a path hint
-func (tr *bTree) DeleteHint(key kind, hint *PathHint) (kind, bool) {
+func (tr *bTree) DeleteHint(key kind, hint *bPathHint) (kind, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
 	return tr.deleteHint(key, hint)
 }
 
-func (tr *bTree) deleteHint(key kind, hint *PathHint) (kind, bool) {
+func (tr *bTree) deleteHint(key kind, hint *bPathHint) (kind, bool) {
 	if tr.root == nil {
 		return tr.empty, false
 	}
@@ -479,7 +484,7 @@ func (tr *bTree) deleteHint(key kind, hint *PathHint) (kind, bool) {
 }
 
 func (tr *bTree) delete(cn **node, max bool, key kind,
-	hint *PathHint, depth int,
+	hint *bPathHint, depth int,
 ) (kind, bool) {
 	n := tr.cowLoad(cn)
 	var i int
@@ -627,7 +632,7 @@ func (tr *bTree) Ascend(pivot kind, iter func(item kind) bool) {
 // The return value of this function determines whether we should keep iterating
 // upon this functions return.
 func (tr *bTree) ascend(n *node, pivot kind,
-	hint *PathHint, depth int, iter func(item kind) bool,
+	hint *bPathHint, depth int, iter func(item kind) bool,
 ) bool {
 	i, found := tr.find(n, pivot, hint, depth)
 	if !found {
@@ -701,7 +706,7 @@ func (tr *bTree) Descend(pivot kind, iter func(item kind) bool) {
 }
 
 func (tr *bTree) descend(n *node, pivot kind,
-	hint *PathHint, depth int, iter func(item kind) bool,
+	hint *bPathHint, depth int, iter func(item kind) bool,
 ) bool {
 	i, found := tr.find(n, pivot, hint, depth)
 	if !found {
@@ -951,7 +956,7 @@ outer:
 		n = tr.cowLoad(&(*n.children)[i])
 	}
 	// revert the counts
-	var hint PathHint
+	var hint bPathHint
 	n = tr.root
 	for i := 0; i < len(path); i++ {
 		if i < len(hint.path) {

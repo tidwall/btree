@@ -638,7 +638,7 @@ func TestRandom(t *testing.T) {
 	tr.Set(keys[0])
 	tr.Set(keys[len(keys)-1])
 	shuffleItems(keys)
-	var hint PathHint
+	var hint bPathHint
 	for i := 0; i < len(keys); i++ {
 		if v, ok := tr.Get(keys[i]); !ok || !eq(v, keys[i]) {
 			t.Fatalf("expected '%v', got '%v'", keys[i], v)
@@ -922,7 +922,7 @@ func TestCopy(t *testing.T) {
 func TestVarious(t *testing.T) {
 	N := 1_000_000
 	tr := testNewBTree()
-	var hint PathHint
+	var hint bPathHint
 	for _, i := range randKeys(N) {
 		if v, ok := tr.SetHint(i, &hint); ok || !eq(v, tr.empty) {
 			panic("!")
