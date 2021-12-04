@@ -23,6 +23,10 @@ const degree = 128
 // the type, rather than creating an entirely new type.
 type kind = interface{}
 
+// contextKind is the kind of context that can be passed to NewOptions and the
+// less function
+type contextKind = interface{}
+
 // BTree alias
 // This is an alias to the local bTree type, which exports it for public use
 // at a package level.
@@ -32,8 +36,8 @@ type BTree = bTree
 // less returns true if A is less than B.
 // The value of context will be whatever was passed to NewOptions through the
 // Options.Context field, otherwise nil if the field was not set.
-func less(a, b kind, context interface{}) bool {
-	return context.(func(a, b interface{}) bool)(a, b)
+func less(a, b kind, context contextKind) bool {
+	return context.(func(a, b contextKind) bool)(a, b)
 }
 
 // The functions below, which begin with "test*", are required by the
@@ -57,7 +61,7 @@ func testMakeItem(x int) (item kind) {
 // testNewBTree must return an operational btree for testing.
 func testNewBTree() *bTree {
 	return NewOptions(Options{
-		Context: func(a, b interface{}) bool {
+		Context: func(a, b contextKind) bool {
 			if a == nil {
 				return b != nil
 			} else if b == nil {
@@ -82,7 +86,7 @@ type bTree struct {
 	cow   *cow
 	root  *node
 	count int
-	ctx   interface{}
+	ctx   contextKind
 	locks bool
 	empty kind
 }
@@ -120,7 +124,7 @@ type PathHint struct {
 
 type Options struct {
 	NoLocks bool
-	Context interface{}
+	Context contextKind
 }
 
 // New returns a new BTree
