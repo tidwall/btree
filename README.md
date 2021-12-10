@@ -1,4 +1,4 @@
-### This is a experimental branch of `tidwall/btree` that enables generics. Requires Go 1.18 and above.
+### This is a experimental branch of that enables generics. Requires Go 1.18 and above.
 
 # btree
 
