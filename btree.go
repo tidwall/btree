@@ -32,19 +32,6 @@ type cow struct {
 	_ int // cannot be an empty struct
 }
 
-func (tr *BTree[T]) newNode(leaf bool) *node[T] {
-	n := &node[T]{cow: tr.cow}
-	if !leaf {
-		n.children = new([]*node[T])
-	}
-	return n
-}
-
-// leaf returns true if the node is a leaf.
-func (n *node[T]) leaf() bool {
-	return n.children == nil
-}
-
 // PathHint is a utility type used with the *Hint() functions. Hints provide
 // faster operations for clustered keys.
 type PathHint struct {
@@ -75,6 +62,19 @@ func NewOptions[T any](less func(a, b T) bool, opts Options) *BTree[T] {
 // using the same "less" function provided to New.
 func (tr *BTree[T]) Less(a, b T) bool {
 	return tr.less(a, b)
+}
+
+func (tr *BTree[T]) newNode(leaf bool) *node[T] {
+	n := &node[T]{cow: tr.cow}
+	if !leaf {
+		n.children = new([]*node[T])
+	}
+	return n
+}
+
+// leaf returns true if the node is a leaf.
+func (n *node[T]) leaf() bool {
+	return n.children == nil
 }
 
 func (tr *BTree[T]) find(n *node[T], key T, hint *PathHint, depth int,

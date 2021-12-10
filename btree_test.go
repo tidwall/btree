@@ -12,16 +12,12 @@ import (
 	"time"
 )
 
-///////////////////////////////////////////////////////////////////////////////
-// BEGIN PARAMS
-///////////////////////////////////////////////////////////////////////////////
-
-// kind is the item type.
+// testKind is the item type.
 // It's important to use the equal symbol, which tells Go to create an alias of
 // the type, rather than creating an entirely new type.
-type kind = int
+type testKind = int
 
-func testLess(a, b kind) bool {
+func testLess(a, b testKind) bool {
 	return a < b
 }
 
@@ -39,13 +35,13 @@ func testCustomSeed() (seed int64, ok bool) {
 // It's required that the returned item maintains equal order as the
 // provided int, such that:
 //    testMakeItem(0) < testMakeItem(1) < testMakeItem(2) < testMakeItem(10)
-func testMakeItem(x int) (item kind) {
+func testMakeItem(x int) (item testKind) {
 	return x
 }
 
 // testNewBTree must return an operational btree for testing.
-func testNewBTree() *BTree[kind] {
-	return New[kind](testLess)
+func testNewBTree() *BTree[testKind] {
+	return New[testKind](testLess)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -68,8 +64,8 @@ func init() {
 	rand.Seed(seed)
 }
 
-func randKeys(N int) (keys []kind) {
-	keys = make([]kind, N)
+func randKeys(N int) (keys []testKind) {
+	keys = make([]testKind, N)
 	for _, i := range rand.Perm(N) {
 		keys[i] = testMakeItem(i)
 	}
@@ -82,8 +78,8 @@ func (tr *BTree[T]) lte(a, b T) bool { return tr.lt(a, b) || tr.eq(a, b) }
 func (tr *BTree[T]) gt(a, b T) bool  { return tr.lt(b, a) }
 func (tr *BTree[T]) gte(a, b T) bool { return tr.gt(a, b) || tr.eq(a, b) }
 
-func kindsAreEqual(a, b []kind) bool {
-	tr := New[kind](testLess)
+func kindsAreEqual(a, b []testKind) bool {
+	tr := New[testKind](testLess)
 	if len(a) != len(b) {
 		return false
 	}
@@ -110,27 +106,27 @@ func TestMakeItemOrder(t *testing.T) {
 func TestDescend(t *testing.T) {
 	tr := testNewBTree()
 	var count int
-	tr.Descend(testMakeItem(rand.Int()), func(item kind) bool {
+	tr.Descend(testMakeItem(rand.Int()), func(item testKind) bool {
 		count++
 		return true
 	})
 	if count > 0 {
 		t.Fatalf("expected 0, got %v", count)
 	}
-	var keys []kind
+	var keys []testKind
 	for i := 0; i < 1000; i += 10 {
 		keys = append(keys, testMakeItem(i))
 		tr.Set(keys[len(keys)-1])
 	}
-	var exp []kind
-	tr.Reverse(func(item kind) bool {
+	var exp []testKind
+	tr.Reverse(func(item testKind) bool {
 		exp = append(exp, item)
 		return true
 	})
 	for i := 999; i >= 0; i-- {
 		key := testMakeItem(i)
-		var all []kind
-		tr.Descend(key, func(item kind) bool {
+		var all []testKind
+		tr.Descend(key, func(item testKind) bool {
 			all = append(all, item)
 			return true
 		})
@@ -138,7 +134,7 @@ func TestDescend(t *testing.T) {
 			exp = exp[1:]
 		}
 		var count int
-		tr.Descend(key, func(item kind) bool {
+		tr.Descend(key, func(item testKind) bool {
 			if count == (i+1)%maxItems {
 				return false
 			}
@@ -155,7 +151,7 @@ func TestDescend(t *testing.T) {
 		}
 		for j := 0; j < tr.Len(); j++ {
 			count = 0
-			tr.Descend(key, func(item kind) bool {
+			tr.Descend(key, func(item testKind) bool {
 				if count == j {
 					return false
 				}
@@ -169,14 +165,14 @@ func TestDescend(t *testing.T) {
 func TestAscend(t *testing.T) {
 	tr := testNewBTree()
 	var count int
-	tr.Ascend(testMakeItem(1), func(item kind) bool {
+	tr.Ascend(testMakeItem(1), func(item testKind) bool {
 		count++
 		return true
 	})
 	if count > 0 {
 		t.Fatalf("expected 0, got %v", count)
 	}
-	var keys []kind
+	var keys []testKind
 	for i := 0; i < 1000; i += 10 {
 		keys = append(keys, testMakeItem(i))
 		tr.Set(keys[len(keys)-1])
@@ -185,8 +181,8 @@ func TestAscend(t *testing.T) {
 	exp := keys
 	for i := -1; i < 1000; i++ {
 		key := testMakeItem(i)
-		var all []kind
-		tr.Ascend(key, func(item kind) bool {
+		var all []testKind
+		tr.Ascend(key, func(item testKind) bool {
 			all = append(all, item)
 			return true
 		})
@@ -194,7 +190,7 @@ func TestAscend(t *testing.T) {
 			exp = exp[1:]
 		}
 		var count int
-		tr.Ascend(key, func(item kind) bool {
+		tr.Ascend(key, func(item testKind) bool {
 			if count == (i+1)%maxItems {
 				return false
 			}
@@ -235,15 +231,15 @@ func TestSimpleRandom(t *testing.T) {
 			}
 		}
 		pivot := items[len(items)/2]
-		tr.Ascend(pivot, func(item kind) bool {
+		tr.Ascend(pivot, func(item testKind) bool {
 			if tr.Less(item, pivot) {
 				panic("!")
 			}
 			return true
 		})
-		var min kind
+		var min testKind
 		index := 0
-		tr.Scan(func(item kind) bool {
+		tr.Scan(func(item testKind) bool {
 			if index == len(items)/2 {
 				return false
 			}
@@ -278,7 +274,7 @@ func TestSimpleRandom(t *testing.T) {
 			}
 		}
 		tr.sane()
-		tr.Scan(func(item kind) bool {
+		tr.Scan(func(item testKind) bool {
 			panic("!")
 		})
 	}
@@ -311,9 +307,9 @@ func TestBTree(t *testing.T) {
 	}
 
 	// scan all items
-	var prev kind
+	var prev testKind
 	var count int
-	tr.Scan(func(item kind) bool {
+	tr.Scan(func(item testKind) bool {
 		if count > 0 {
 			if tr.lte(item, prev) {
 				t.Fatal("out of order")
@@ -329,7 +325,7 @@ func TestBTree(t *testing.T) {
 
 	// reverse all items
 	count = 0
-	tr.Reverse(func(item kind) bool {
+	tr.Reverse(func(item testKind) bool {
 		if count > 0 {
 			if tr.gte(item, prev) {
 				t.Fatal("out of order")
@@ -351,7 +347,7 @@ func TestBTree(t *testing.T) {
 	// scan and quit at various steps
 	for i := 0; i < 100; i++ {
 		var j int
-		tr.Scan(func(item kind) bool {
+		tr.Scan(func(item testKind) bool {
 			if j == i {
 				return false
 			}
@@ -363,7 +359,7 @@ func TestBTree(t *testing.T) {
 	// reverse and quit at various steps
 	for i := 0; i < 100; i++ {
 		var j int
-		tr.Reverse(func(item kind) bool {
+		tr.Reverse(func(item testKind) bool {
 			if j == i {
 				return false
 			}
@@ -399,7 +395,7 @@ func TestBTree(t *testing.T) {
 
 	// scan items
 	count = 0
-	tr.Scan(func(item kind) bool {
+	tr.Scan(func(item testKind) bool {
 		if count > 0 {
 			if tr.lte(item, prev) {
 				t.Fatal("out of order")
@@ -438,11 +434,11 @@ func TestBTree(t *testing.T) {
 	if v, ok := tr.Get(keys[0]); ok || !tr.eq(v, tr.empty) {
 		t.Fatal("expected nil")
 	}
-	tr.Scan(func(item kind) bool {
+	tr.Scan(func(item testKind) bool {
 		t.Fatal("should not be reached")
 		return true
 	})
-	tr.Reverse(func(item kind) bool {
+	tr.Reverse(func(item testKind) bool {
 		t.Fatal("should not be reached")
 		return true
 	})
@@ -497,14 +493,14 @@ func TestBTree256(t *testing.T) {
 	}
 }
 
-func shuffleItems(keys []kind) {
+func shuffleItems(keys []testKind) {
 	for i := range keys {
 		j := rand.Intn(i + 1)
 		keys[i], keys[j] = keys[j], keys[i]
 	}
 }
 
-func sortItems(keys []kind) {
+func sortItems(keys []testKind) {
 	tr := testNewBTree()
 	sort.Slice(keys, func(i, j int) bool {
 		return tr.lt(keys[i], keys[j])
@@ -544,7 +540,7 @@ func TestRandom(t *testing.T) {
 	tr.sane()
 	sortItems(keys)
 	var n int
-	tr.Scan(func(item kind) bool {
+	tr.Scan(func(item testKind) bool {
 		n++
 		return false
 	})
@@ -553,7 +549,7 @@ func TestRandom(t *testing.T) {
 	}
 
 	n = 0
-	tr.Scan(func(item kind) bool {
+	tr.Scan(func(item testKind) bool {
 		if !tr.eq(item, keys[n]) {
 			t.Fatalf("expected %v, got %v", keys[n], item)
 		}
@@ -574,7 +570,7 @@ func TestRandom(t *testing.T) {
 	}
 
 	n = 0
-	tr.Reverse(func(item kind) bool {
+	tr.Reverse(func(item testKind) bool {
 		n++
 		return false
 	})
@@ -582,7 +578,7 @@ func TestRandom(t *testing.T) {
 		t.Fatalf("expected 1, got %d", n)
 	}
 	n = 0
-	tr.Reverse(func(item kind) bool {
+	tr.Reverse(func(item testKind) bool {
 		if !tr.eq(item, keys[len(keys)-n-1]) {
 			t.Fatalf("expected %v, got %v", keys[len(keys)-n-1], item)
 		}
@@ -601,7 +597,7 @@ func TestRandom(t *testing.T) {
 	n = 0
 	for i := 0; i < 1000; i++ {
 		n := 0
-		tr.Scan(func(item kind) bool {
+		tr.Scan(func(item testKind) bool {
 			if n == i {
 				return false
 			}
@@ -616,7 +612,7 @@ func TestRandom(t *testing.T) {
 	n = 0
 	for i := 0; i < 1000; i++ {
 		n = 0
-		tr.Reverse(func(item kind) bool {
+		tr.Reverse(func(item testKind) bool {
 			if n == i {
 				return false
 			}
@@ -630,9 +626,9 @@ func TestRandom(t *testing.T) {
 
 	sortItems(keys)
 	for i := 0; i < len(keys); i++ {
-		var res kind
+		var res testKind
 		var j int
-		tr.Ascend(keys[i], func(item kind) bool {
+		tr.Ascend(keys[i], func(item testKind) bool {
 			if j == 0 {
 				res = item
 			}
@@ -644,9 +640,9 @@ func TestRandom(t *testing.T) {
 		}
 	}
 	for i := len(keys) - 1; i >= 0; i-- {
-		var res kind
+		var res testKind
 		var j int
-		tr.Descend(keys[i], func(item kind) bool {
+		tr.Descend(keys[i], func(item testKind) bool {
 			if j == 0 {
 				res = item
 			}
@@ -800,7 +796,7 @@ func TestDeleteRandom(t *testing.T) {
 	}
 	tr.sane()
 	for tr.Len() > 0 {
-		var item kind
+		var item testKind
 		var ok bool
 		switch rand.Int() % 3 {
 		case 0:
@@ -850,9 +846,9 @@ func TestCopy(t *testing.T) {
 		tr.Set(items[i])
 	}
 	var wait int32
-	var testCopyDeep func(tr *BTree[kind], parent bool)
+	var testCopyDeep func(tr *BTree[testKind], parent bool)
 
-	testCopyDeep = func(tr *BTree[kind], parent bool) {
+	testCopyDeep = func(tr *BTree[testKind], parent bool) {
 		defer func() { atomic.AddInt32(&wait, -1) }()
 		if parent {
 			// 2 grandchildren
@@ -862,7 +858,7 @@ func TestCopy(t *testing.T) {
 			}
 		}
 
-		items2 := make([]kind, 10000)
+		items2 := make([]testKind, 10000)
 		for i := 0; i < len(items2); i++ {
 			x := testMakeItem(rand.Int())
 			_, ok := itemsM.Get(x)
@@ -1006,7 +1002,7 @@ func TestVarious(t *testing.T) {
 	}
 	for i := 0; i < 100; i++ {
 		var count int
-		tr.Walk(func(_ []kind) bool {
+		tr.Walk(func(_ []testKind) bool {
 			if count == i {
 				return false
 			}
