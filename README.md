@@ -1,11 +1,14 @@
+### This is a experimental branch of `tidwall/btree` that enables generics. Requires Go 1.18 and above.
+
 # btree
 
 [![GoDoc](https://godoc.org/github.com/tidwall/btree?status.svg)](https://godoc.org/github.com/tidwall/btree)
 
-An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go. 
+An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go.
 
 ## Features
 
+- Support for Generics (Go 1.18).
 - `Copy()` method with copy-on-write support.
 - Fast bulk loading for pre-ordered data using the `Load()` method.
 - All operations are thread-safe.
@@ -16,7 +19,7 @@ An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) impl
 To start using btree, install Go and run `go get`:
 
 ```sh
-$ go get -u github.com/tidwall/btree
+$ go get -u github.com/tidwall/btree@generics
 ```
 
 ## Usage
@@ -36,19 +39,17 @@ type Item struct {
 
 // byKeys is a comparison function that compares item keys and returns true
 // when a is less than b.
-func byKeys(a, b interface{}) bool {
-	i1, i2 := a.(*Item), b.(*Item)
-	return i1.Key < i2.Key
+func byKeys(a, b *Item) bool {
+	return a.Key < b.Key
 }
 
 // byVals is a comparison function that compares item values and returns true
 // when a is less than b.
-func byVals(a, b interface{}) bool {
-	i1, i2 := a.(*Item), b.(*Item)
-	if i1.Val < i2.Val {
+func byVals(a, b *Item) bool {
+	if a.Val < b.Val {
 		return true
 	}
-	if i1.Val > i2.Val {
+	if a.Val > b.Val {
 		return false
 	}
 	// Both vals are equal so we should fall though
@@ -60,8 +61,8 @@ func main() {
 	// Create a tree for keys and a tree for values.
 	// The "keys" tree will be sorted on the Keys field.
 	// The "values" tree will be sorted on the Values field.
-	keys := btree.New(byKeys)
-	vals := btree.New(byVals)
+	keys := btree.New[*Item](byKeys)
+	vals := btree.New[*Item](byVals)
 
 	// Create some items.
 	users := []*Item{
@@ -80,17 +81,15 @@ func main() {
 	}
 
 	// Iterate over each user in the key tree
-	keys.Ascend(nil, func(item interface{}) bool {
-		kvi := item.(*Item)
-		fmt.Printf("%s %s\n", kvi.Key, kvi.Val)
+	keys.Scan(func(item *Item) bool {
+		fmt.Printf("%s %s\n", item.Key, item.Val)
 		return true
 	})
 
 	fmt.Printf("\n")
 	// Iterate over each user in the val tree
-	vals.Ascend(nil, func(item interface{}) bool {
-		kvi := item.(*Item)
-		fmt.Printf("%s %s\n", kvi.Key, kvi.Val)
+	vals.Scan(func(item *Item) bool {
+		fmt.Printf("%s %s\n", item.Key, item.Val)
 		return true
 	})
 
@@ -163,8 +162,8 @@ DeleteAt(index)  # deletes the item at index
 This implementation was designed with performance in mind. 
 
 - `google`: The [google/btree](https://github.com/google/btree) package
-- `tidwall`: The [tidwall/btree](https://github.com/tidwall/btree) package
-- `tidwall(G)`: The [tidwall/btree](https://github.com/tidwall/btree) package
+- `tidwall`: The [tidwall/btree](https://github.com/tidwall/btree) package (without generics)
+- `tidwall(G)`: The [tidwall/btree](https://github.com/tidwall/btree/tree/generics) package (with generics)
 - `go-arr`: A simple Go array
 
 The following benchmarks were run on my 2019 Macbook Pro (2.4 GHz 8-Core Intel Core i9) 
@@ -210,7 +209,7 @@ tidwall:    get-rand-hint  1,000,000 ops in 775ms, 1,290,195/sec, 775 ns/op
 tidwall(G): get-rand-hint  1,000,000 ops in 280ms, 3,575,213/sec, 279 ns/op
 ```
 
-*You can find the benchmark utility at [tidwall/btree-benchmark](https://github.com/tidwall/btree-benchmark)*
+*You can find the benchmark utility at [tidwall/btree-benchmark](https://github.com/tidwall/btree-benchmark/tree/generics)*
 
 ## Contact
 
