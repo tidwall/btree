@@ -4,1209 +4,1209 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
+	"sort"
 	"strconv"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
+///////////////////////////////////////////////////////////////////////////////
+// BEGIN PARAMS
+///////////////////////////////////////////////////////////////////////////////
+
+// kind is the item type.
+// It's important to use the equal symbol, which tells Go to create an alias of
+// the type, rather than creating an entirely new type.
+type kind = int
+
+func testLess(a, b kind) bool {
+	return a < b
+}
+
+// The functions below, which begin with "test*", are required by the
+// btree_test.go file. If you choose not use include the btree_test.go file in
+// your project then these functions may be omitted.
+
+// testCustomSeed can be used to generate a custom random seed for testing.
+// Returning false will use time.Now().UnixNano()
+func testCustomSeed() (seed int64, ok bool) {
+	return 0, false
+}
+
+// testMakeItem must return a valid item for testing.
+// It's required that the returned item maintains equal order as the
+// provided int, such that:
+//    testMakeItem(0) < testMakeItem(1) < testMakeItem(2) < testMakeItem(10)
+func testMakeItem(x int) (item kind) {
+	return x
+}
+
+// testNewBTree must return an operational btree for testing.
+func testNewBTree() *BTree[kind] {
+	return New[kind](testLess)
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// END PARAMS
+///////////////////////////////////////////////////////////////////////////////
+
+var seed int64
+
 func init() {
-	seed, err := strconv.ParseInt(os.Getenv("SEED"), 10, 64)
-	if err != nil {
-		seed = time.Now().UnixNano()
+	var ok bool
+	seed, ok = testCustomSeed()
+	if !ok {
+		var err error
+		seed, err = strconv.ParseInt(os.Getenv("SEED"), 10, 64)
+		if err != nil {
+			seed = time.Now().UnixNano()
+		}
 	}
-	// seed = 1637859071499249000
 	fmt.Printf("seed: %d\n", seed)
 	rand.Seed(seed)
 }
 
-func assert(x bool) {
-	if !x {
-		panic("assert failed")
+func randKeys(N int) (keys []kind) {
+	keys = make([]kind, N)
+	for _, i := range rand.Perm(N) {
+		keys[i] = testMakeItem(i)
+	}
+	return keys
+}
+
+func (tr *BTree[T]) lt(a, b T) bool  { return tr.less(a, b) }
+func (tr *BTree[T]) eq(a, b T) bool  { return !(tr.lt(a, b) || tr.lt(b, a)) }
+func (tr *BTree[T]) lte(a, b T) bool { return tr.lt(a, b) || tr.eq(a, b) }
+func (tr *BTree[T]) gt(a, b T) bool  { return tr.lt(b, a) }
+func (tr *BTree[T]) gte(a, b T) bool { return tr.gt(a, b) || tr.eq(a, b) }
+
+func kindsAreEqual(a, b []kind) bool {
+	tr := New[kind](testLess)
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		if !tr.eq(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func TestMakeItemOrder(t *testing.T) {
+	tr := testNewBTree()
+	ints := []int{0, 1, 2, 3, 4, 10, 20, 30, 40, 100, 200, 300, 400}
+	for i := 0; i < len(ints)-1; i++ {
+		a := testMakeItem(ints[i])
+		b := testMakeItem(ints[i+1])
+		if !tr.lt(a, b) {
+			t.Fatalf("bad ordering for testMakeItem: '%v' !< '%v'", a, b)
+		}
 	}
 }
 
-func intLess(a, b interface{}) bool {
-	return a.(int) < b.(int)
+func TestDescend(t *testing.T) {
+	tr := testNewBTree()
+	var count int
+	tr.Descend(testMakeItem(rand.Int()), func(item kind) bool {
+		count++
+		return true
+	})
+	if count > 0 {
+		t.Fatalf("expected 0, got %v", count)
+	}
+	var keys []kind
+	for i := 0; i < 1000; i += 10 {
+		keys = append(keys, testMakeItem(i))
+		tr.Set(keys[len(keys)-1])
+	}
+	var exp []kind
+	tr.Reverse(func(item kind) bool {
+		exp = append(exp, item)
+		return true
+	})
+	for i := 999; i >= 0; i-- {
+		key := testMakeItem(i)
+		var all []kind
+		tr.Descend(key, func(item kind) bool {
+			all = append(all, item)
+			return true
+		})
+		for len(exp) > 0 && tr.Less(key, exp[0]) {
+			exp = exp[1:]
+		}
+		var count int
+		tr.Descend(key, func(item kind) bool {
+			if count == (i+1)%maxItems {
+				return false
+			}
+			count++
+			return true
+		})
+		if count > len(exp) {
+			t.Fatalf("expected 1, got %v", count)
+		}
+		if !kindsAreEqual(exp, all) {
+			fmt.Printf("exp: %v\n", exp)
+			fmt.Printf("all: %v\n", all)
+			t.Fatal("mismatch")
+		}
+		for j := 0; j < tr.Len(); j++ {
+			count = 0
+			tr.Descend(key, func(item kind) bool {
+				if count == j {
+					return false
+				}
+				count++
+				return true
+			})
+		}
+	}
+}
+
+func TestAscend(t *testing.T) {
+	tr := testNewBTree()
+	var count int
+	tr.Ascend(testMakeItem(1), func(item kind) bool {
+		count++
+		return true
+	})
+	if count > 0 {
+		t.Fatalf("expected 0, got %v", count)
+	}
+	var keys []kind
+	for i := 0; i < 1000; i += 10 {
+		keys = append(keys, testMakeItem(i))
+		tr.Set(keys[len(keys)-1])
+		tr.sane()
+	}
+	exp := keys
+	for i := -1; i < 1000; i++ {
+		key := testMakeItem(i)
+		var all []kind
+		tr.Ascend(key, func(item kind) bool {
+			all = append(all, item)
+			return true
+		})
+		for len(exp) > 0 && tr.Less(exp[0], key) {
+			exp = exp[1:]
+		}
+		var count int
+		tr.Ascend(key, func(item kind) bool {
+			if count == (i+1)%maxItems {
+				return false
+			}
+			count++
+			return true
+		})
+		if count > len(exp) {
+			t.Fatalf("expected 1, got %v", count)
+		}
+		if !kindsAreEqual(exp, all) {
+			t.Fatal("mismatch")
+		}
+	}
+}
+
+func TestSimpleRandom(t *testing.T) {
+	start := time.Now()
+	for time.Since(start) < time.Second*2 {
+		N := 100_000
+		items := randKeys(N)
+		tr := testNewBTree()
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if v, ok := tr.Get(items[i]); ok || !tr.eq(v, tr.empty) {
+				panic("!")
+			}
+			if v, ok := tr.Set(items[i]); ok || !tr.eq(v, tr.empty) {
+				panic("!")
+			}
+			if v, ok := tr.Get(items[i]); !ok || !tr.eq(v, items[i]) {
+				panic("!")
+			}
+		}
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if v, ok := tr.Set(items[i]); !ok || !tr.eq(v, items[i]) {
+				panic("!")
+			}
+		}
+		pivot := items[len(items)/2]
+		tr.Ascend(pivot, func(item kind) bool {
+			if tr.Less(item, pivot) {
+				panic("!")
+			}
+			return true
+		})
+		var min kind
+		index := 0
+		tr.Scan(func(item kind) bool {
+			if index == len(items)/2 {
+				return false
+			}
+			if index > 0 {
+				if tr.Less(item, min) {
+					panic("!")
+				}
+			}
+			min = item
+			index++
+			return true
+		})
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if v, ok := tr.Delete(items[i]); !ok || !tr.eq(v, items[i]) {
+				panic("!")
+			}
+			if i%97 == 0 {
+				tr.sane()
+			}
+			if v, ok := tr.Delete(items[i]); ok || !tr.eq(v, tr.empty) {
+				panic("!")
+			}
+		}
+		if tr.Len() != 0 {
+			panic("!")
+		}
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			if v, ok := tr.Delete(items[i]); ok || !tr.eq(v, tr.empty) {
+				panic("!")
+			}
+		}
+		tr.sane()
+		tr.Scan(func(item kind) bool {
+			panic("!")
+		})
+	}
 }
 
 func TestBTree(t *testing.T) {
-	func() {
-		defer func() {
-			msg, ok := recover().(string)
-			assert(ok && msg == "nil less")
-		}()
-		New(nil)
-	}()
-	func() {
-		defer func() {
-			msg, ok := recover().(string)
-			assert(ok && msg == "nil less")
-		}()
-		NewNonConcurrent(nil)
-	}()
-	N := 1_000_000
+	N := 10000
+	tr := testNewBTree()
+	tr.sane()
+	keys := randKeys(N)
+
+	// insert all items
+	for _, key := range keys {
+		if v, ok := tr.Set(key); ok || !tr.eq(v, tr.empty) {
+			t.Fatal("expected false")
+		}
+		tr.sane()
+	}
+
+	// check length
+	if tr.Len() != len(keys) {
+		t.Fatalf("expected %v, got %v", len(keys), tr.Len())
+	}
+
+	// get each value
+	for _, key := range keys {
+		if v, ok := tr.Get(key); !ok || !tr.eq(v, key) {
+			t.Fatalf("expected '%v', got '%v'", key, v)
+		}
+	}
+
+	// scan all items
+	var prev kind
+	var count int
+	tr.Scan(func(item kind) bool {
+		if count > 0 {
+			if tr.lte(item, prev) {
+				t.Fatal("out of order")
+			}
+		}
+		prev = item
+		count++
+		return true
+	})
+	if count != len(keys) {
+		t.Fatalf("expected '%v', got '%v'", len(keys), count)
+	}
+
+	// reverse all items
+	count = 0
+	tr.Reverse(func(item kind) bool {
+		if count > 0 {
+			if tr.gte(item, prev) {
+				t.Fatal("out of order")
+			}
+		}
+		prev = item
+		count++
+		return true
+	})
+	if count != len(keys) {
+		t.Fatalf("expected '%v', got '%v'", len(keys), count)
+	}
+
+	// try to get an invalid item
+	if v, ok := tr.Get(testMakeItem(-1)); ok || !tr.eq(v, tr.empty) {
+		t.Fatal("expected nil")
+	}
+
+	// scan and quit at various steps
+	for i := 0; i < 100; i++ {
+		var j int
+		tr.Scan(func(item kind) bool {
+			if j == i {
+				return false
+			}
+			j++
+			return true
+		})
+	}
+
+	// reverse and quit at various steps
+	for i := 0; i < 100; i++ {
+		var j int
+		tr.Reverse(func(item kind) bool {
+			if j == i {
+				return false
+			}
+			j++
+			return true
+		})
+	}
+
+	// delete half the items
+	for _, key := range keys[:len(keys)/2] {
+		if v, ok := tr.Delete(key); !ok || !tr.eq(v, key) {
+			t.Fatalf("expected '%v', got '%v'", key, v)
+		}
+	}
+
+	// check length
+	if tr.Len() != len(keys)/2 {
+		t.Fatalf("expected %v, got %v", len(keys)/2, tr.Len())
+	}
+
+	// try delete half again
+	for _, key := range keys[:len(keys)/2] {
+		if v, ok := tr.Delete(key); ok || !tr.eq(v, tr.empty) {
+			t.Fatal("expected false")
+		}
+		tr.sane()
+	}
+
+	// check length
+	if tr.Len() != len(keys)/2 {
+		t.Fatalf("expected %v, got %v", len(keys)/2, tr.Len())
+	}
+
+	// scan items
+	count = 0
+	tr.Scan(func(item kind) bool {
+		if count > 0 {
+			if tr.lte(item, prev) {
+				t.Fatal("out of order")
+			}
+		}
+		prev = item
+		count++
+		return true
+	})
+	if count != len(keys)/2 {
+		t.Fatalf("expected '%v', got '%v'", len(keys), count)
+	}
+
+	// replace second half
+	for _, key := range keys[len(keys)/2:] {
+		if v, ok := tr.Set(key); !ok || !tr.eq(v, key) {
+			t.Fatalf("expected '%v', got '%v'", key, v)
+		}
+		tr.sane()
+	}
+
+	// delete next half the items
+	for _, key := range keys[len(keys)/2:] {
+		if v, ok := tr.Delete(key); !ok || !tr.eq(v, key) {
+			t.Fatalf("expected '%v', got '%v'", key, v)
+		}
+		tr.sane()
+	}
+
+	// check length
+	if tr.Len() != 0 {
+		t.Fatalf("expected %v, got %v", 0, tr.Len())
+	}
+
+	// do some stuff on an empty tree
+	if v, ok := tr.Get(keys[0]); ok || !tr.eq(v, tr.empty) {
+		t.Fatal("expected nil")
+	}
+	tr.Scan(func(item kind) bool {
+		t.Fatal("should not be reached")
+		return true
+	})
+	tr.Reverse(func(item kind) bool {
+		t.Fatal("should not be reached")
+		return true
+	})
+	if v, ok := tr.Delete(testMakeItem(-1)); ok || !tr.eq(v, tr.empty) {
+		t.Fatal("expected nil")
+	}
+	tr.sane()
+}
+
+func TestBTreeOne(t *testing.T) {
+	tr := testNewBTree()
+	tr.Set(testMakeItem(1))
+	tr.Delete(testMakeItem(1))
+	tr.Set(testMakeItem(1))
+	tr.Delete(testMakeItem(1))
+	tr.Set(testMakeItem(1))
+	tr.Delete(testMakeItem(1))
+	if tr.Len() != 0 {
+		panic("!")
+	}
+	tr.sane()
+}
+
+func TestBTree256(t *testing.T) {
+	tr := testNewBTree()
+	var n int
 	for j := 0; j < 2; j++ {
-		var tr *BTree
-		if j == 0 {
-			tr = New(intLess)
-		} else {
-			tr = NewNonConcurrent(intLess)
+		for _, i := range rand.Perm(256) {
+			tr.Set(testMakeItem(i))
+			n++
+			if tr.Len() != n {
+				t.Fatalf("expected 256, got %d", n)
+			}
 		}
-		for i := 0; i < N; i++ {
-			assert(tr.Load(i) == nil)
+		for _, i := range rand.Perm(256) {
+			if v, ok := tr.Get(testMakeItem(i)); !ok || !tr.eq(v, testMakeItem(i)) {
+				t.Fatalf("expected %v, got %v", i, v)
+			}
 		}
-		assert(tr.Len() == N)
-		for i := 0; i < N; i++ {
-			assert(tr.Get(i) == i)
+		for _, i := range rand.Perm(256) {
+			tr.Delete(testMakeItem(i))
+			n--
+			if tr.Len() != n {
+				t.Fatalf("expected 256, got %d", n)
+			}
 		}
-
-		count := 0
-		tr.Ascend(nil, func(_ interface{}) bool {
-			count++
-			return true
-		})
-		assert(count == N)
-		count = 0
-		tr.Ascend(N/2, func(_ interface{}) bool {
-			count++
-			return true
-		})
-		assert(count == N/2)
-
-		count = 0
-		tr.Descend(nil, func(_ interface{}) bool {
-			count++
-			return true
-		})
-		assert(count == N)
-		count = 0
-		tr.Descend(N/2, func(_ interface{}) bool {
-			count++
-			return true
-		})
-		assert(count == N/2+1)
-
-		for i := 0; i < N; i++ {
-			assert(tr.Delete(i) == i)
+		for _, i := range rand.Perm(256) {
+			if v, ok := tr.Get(testMakeItem(i)); ok || !tr.eq(v, tr.empty) {
+				t.Fatal("expected nil")
+			}
 		}
-		assert(tr.Len() == 0)
-		assert(tr.Min() == nil)
-		assert(tr.Max() == nil)
-		assert(tr.PopMin() == nil)
-		assert(tr.PopMax() == nil)
-
-		for i := 0; i < N; i++ {
-			assert(tr.Get(i) == nil)
-		}
-		for i := 0; i < N; i++ {
-			assert(tr.Set(i) == nil)
-		}
-		assert(tr.Len() == N)
-		var hint PathHint
-		for i := 0; i < N; i++ {
-			assert(tr.SetHint(i, &hint) == i)
-		}
-		assert(tr.Len() == N)
-		for i := 0; i < N; i++ {
-			assert(tr.Load(i) == i)
-		}
-		assert(tr.Len() == N)
-		assert(tr.Min() == 0)
-		assert(tr.Max() == N-1)
-		assert(tr.PopMin() == 0)
-		assert(tr.PopMax() == N-1)
-		assert(tr.Set(0) == nil)
-		assert(tr.Set(N-1) == nil)
-		assert(tr.GetAt(0) == 0)
-		assert(tr.GetAt(N) == nil)
-		assert(tr.Set(N-1) == N-1)
-		assert(tr.Height() > 0)
-		assert(tr.DeleteAt(0) == 0)
-		assert(tr.Set(0) == nil)
-		assert(tr.DeleteAt(N-1) == N-1)
-		assert(tr.DeleteAt(N) == nil)
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func(tr *BTree) {
-			wg.Wait()
-			count := 0
-			tr.Walk(func(items []interface{}) {
-				count += len(items)
-			})
-			assert(count == N-1)
-		}(tr.Copy())
-		for i := 0; i < N/2; i++ {
-			tr.Delete(i)
-		}
-		for i := 0; i < N; i++ {
-			tr.Set(i)
-		}
-		wg.Done()
-
-		count = 0
-		tr.Walk(func(items []interface{}) {
-			count += len(items)
-		})
-		assert(count == N)
-
-		func() {
-			defer func() {
-				msg, ok := recover().(string)
-				assert(ok && msg == "nil item")
-			}()
-			tr := NewNonConcurrent(intLess)
-			tr.Set(nil)
-		}()
-		func() {
-			defer func() {
-				msg, ok := recover().(string)
-				assert(ok && msg == "nil item")
-			}()
-			tr := NewNonConcurrent(intLess)
-			tr.Load(nil)
-		}()
-		assert(tr.Get(nil) == nil)
-		assert(tr.Delete(nil) == nil)
-		for i := 0; i < N; i++ {
-			assert(tr.GetHint(i, &hint) == i)
-		}
-		for i := 0; i < N; i++ {
-			assert(tr.DeleteHint(i, &hint) == i)
-		}
-		for i := 0; i < N; i++ {
-			assert(tr.GetHint(i, &hint) == nil)
-		}
-		for i := 0; i < N; i++ {
-			assert(tr.DeleteHint(i, &hint) == nil)
-		}
-
-		assert(tr.Less(1, 2))
-		assert(tr.Less(2, 10))
 	}
 }
 
-// func randKeys(N int) (keys []string) {
-// 	format := fmt.Sprintf("%%0%dd", len(fmt.Sprintf("%d", N-1)))
-// 	for _, i := range rand.Perm(N) {
-// 		keys = append(keys, fmt.Sprintf(format, i))
-// 	}
-// 	return
-// }
+func shuffleItems(keys []kind) {
+	for i := range keys {
+		j := rand.Intn(i + 1)
+		keys[i], keys[j] = keys[j], keys[i]
+	}
+}
 
-// type pair struct {
-// 	key   string
-// 	value interface{}
-// }
+func sortItems(keys []kind) {
+	tr := testNewBTree()
+	sort.Slice(keys, func(i, j int) bool {
+		return tr.lt(keys[i], keys[j])
+	})
+}
 
-// func pairLess(a, b interface{}) bool {
-// 	return a.(pair).key < b.(pair).key
-// }
+func TestRandom(t *testing.T) {
+	N := 200000
+	keys := randKeys(N)
+	tr := testNewBTree()
+	tr.sane()
+	if v, ok := tr.Min(); ok || !tr.eq(v, tr.empty) {
+		t.Fatalf("expected nil")
+	}
+	if v, ok := tr.Max(); ok || !tr.eq(v, tr.empty) {
+		t.Fatalf("expected nil")
+	}
+	if v, ok := tr.PopMin(); ok || !tr.eq(v, tr.empty) {
+		t.Fatalf("expected nil")
+	}
+	if v, ok := tr.PopMax(); ok || !tr.eq(v, tr.empty) {
+		t.Fatalf("expected nil")
+	}
+	if tr.Height() != 0 {
+		t.Fatalf("expected 0, got %d", tr.Height())
+	}
+	tr.sane()
+	shuffleItems(keys)
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Set(keys[i]); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+		if i%123 == 0 {
+			tr.sane()
+		}
+	}
+	tr.sane()
+	sortItems(keys)
+	var n int
+	tr.Scan(func(item kind) bool {
+		n++
+		return false
+	})
+	if n != 1 {
+		t.Fatalf("expected 1, got %d", n)
+	}
 
-// func stringsEquals(a, b []string) bool {
-// 	if len(a) != len(b) {
-// 		return false
-// 	}
-// 	for i := 0; i < len(a); i++ {
-// 		if a[i] != b[i] {
-// 			return false
-// 		}
-// 	}
-// 	return true
-// }
+	n = 0
+	tr.Scan(func(item kind) bool {
+		if !tr.eq(item, keys[n]) {
+			t.Fatalf("expected %v, got %v", keys[n], item)
+		}
+		n++
+		return true
+	})
+	if n != len(keys) {
+		t.Fatalf("expected %d, got %d", len(keys), n)
+	}
+	if tr.Len() != len(keys) {
+		t.Fatalf("expected %d, got %d", tr.Len(), len(keys))
+	}
 
-// func TestDescend(t *testing.T) {
-// 	tr := New(pairLess)
-// 	var count int
-// 	tr.Descend(pair{"1", nil}, func(item interface{}) bool {
-// 		count++
-// 		return true
-// 	})
-// 	if count > 0 {
-// 		t.Fatalf("expected 0, got %v", count)
-// 	}
-// 	var keys []string
-// 	for i := 0; i < 1000; i += 10 {
-// 		keys = append(keys, fmt.Sprintf("%03d", i))
-// 		tr.Set(pair{keys[len(keys)-1], nil})
-// 	}
-// 	var exp []string
-// 	tr.Descend(nil, func(item interface{}) bool {
-// 		exp = append(exp, item.(pair).key)
-// 		return true
-// 	})
-// 	for i := 999; i >= 0; i-- {
-// 		key := fmt.Sprintf("%03d", i)
-// 		var all []string
-// 		tr.Descend(pair{key, nil}, func(item interface{}) bool {
-// 			all = append(all, item.(pair).key)
-// 			return true
-// 		})
-// 		for len(exp) > 0 && key < exp[0] {
-// 			exp = exp[1:]
-// 		}
-// 		var count int
-// 		tr.Descend(pair{key, nil}, func(item interface{}) bool {
-// 			if count == (i+1)%tr.base.MaxItems() {
-// 				return false
-// 			}
-// 			count++
-// 			return true
-// 		})
-// 		if count > len(exp) {
-// 			t.Fatalf("expected 1, got %v", count)
-// 		}
-// 		if !stringsEquals(exp, all) {
-// 			fmt.Printf("exp: %v\n", exp)
-// 			fmt.Printf("all: %v\n", all)
-// 			t.Fatal("mismatch")
-// 		}
-// 	}
-// }
+	for i := 0; i < tr.Len(); i++ {
+		if v, ok := tr.GetAt(i); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected %v, got %v", keys[i], v)
+		}
+	}
 
-// func TestAscend(t *testing.T) {
-// 	tr := New(pairLess)
-// 	var count int
-// 	tr.Ascend(pair{"1", nil}, func(item interface{}) bool {
-// 		count++
-// 		return true
-// 	})
-// 	if count > 0 {
-// 		t.Fatalf("expected 0, got %v", count)
-// 	}
-// 	var keys []string
-// 	for i := 0; i < 1000; i += 10 {
-// 		keys = append(keys, fmt.Sprintf("%03d", i))
-// 		tr.Set(pair{keys[len(keys)-1], nil})
-// 	}
-// 	exp := keys
-// 	for i := -1; i < 1000; i++ {
-// 		var key string
-// 		if i == -1 {
-// 			key = ""
-// 		} else {
-// 			key = fmt.Sprintf("%03d", i)
-// 		}
-// 		var all []string
-// 		tr.Ascend(pair{key, nil}, func(item interface{}) bool {
-// 			all = append(all, item.(pair).key)
-// 			return true
-// 		})
+	n = 0
+	tr.Reverse(func(item kind) bool {
+		n++
+		return false
+	})
+	if n != 1 {
+		t.Fatalf("expected 1, got %d", n)
+	}
+	n = 0
+	tr.Reverse(func(item kind) bool {
+		if !tr.eq(item, keys[len(keys)-n-1]) {
+			t.Fatalf("expected %v, got %v", keys[len(keys)-n-1], item)
+		}
+		n++
+		return true
+	})
+	if n != len(keys) {
+		t.Fatalf("expected %d, got %d", len(keys), n)
+	}
+	if tr.Len() != len(keys) {
+		t.Fatalf("expected %d, got %d", tr.Len(), len(keys))
+	}
 
-// 		for len(exp) > 0 && key > exp[0] {
-// 			exp = exp[1:]
-// 		}
-// 		var count int
-// 		tr.Ascend(pair{key, nil}, func(item interface{}) bool {
-// 			if count == (i+1)%tr.base.MaxItems() {
-// 				return false
-// 			}
-// 			count++
-// 			return true
-// 		})
-// 		if count > len(exp) {
-// 			t.Fatalf("expected 1, got %v", count)
-// 		}
-// 		if !stringsEquals(exp, all) {
-// 			t.Fatal("mismatch")
-// 		}
-// 	}
-// }
+	tr.sane()
 
-// func TestSimpleRandom(t *testing.T) {
-// 	start := time.Now()
-// 	for time.Since(start) < time.Second*2 {
-// 		N := 100_000
-// 		items := make([]int, N)
-// 		for i := 0; i < N; i++ {
-// 			items[i] = rand.Int()
-// 		}
-// 		tr := New(func(a, b interface{}) bool { return a.(int) < b.(int) })
-// 		tr.sane()
-// 		for i := 0; i < len(items); i++ {
-// 			if tr.Get(items[i]) != nil {
-// 				panic("!")
-// 			}
-// 			if tr.Set(items[i]) != nil {
-// 				panic("!")
-// 			}
-// 			if tr.Get(items[i]).(int) != items[i] {
-// 				panic("!")
-// 			}
-// 		}
-// 		tr.sane()
-// 		for i := 0; i < len(items); i++ {
-// 			if tr.Set(items[i]).(int) != items[i] {
-// 				panic("!")
-// 			}
-// 		}
+	n = 0
+	for i := 0; i < 1000; i++ {
+		n := 0
+		tr.Scan(func(item kind) bool {
+			if n == i {
+				return false
+			}
+			n++
+			return true
+		})
+		if n != i {
+			t.Fatalf("expected %d, got %d", i, n)
+		}
+	}
 
-// 		pivot := items[len(items)/2]
-// 		tr.Ascend(pivot, func(item interface{}) bool {
-// 			if item.(int) < pivot {
-// 				panic("!")
-// 			}
-// 			return true
-// 		})
-// 		min := -1
-// 		index := 0
-// 		tr.Ascend(nil, func(item interface{}) bool {
-// 			if index == len(items)/2 {
-// 				return false
-// 			}
-// 			if item.(int) < min {
-// 				panic("!")
-// 			}
-// 			min = item.(int)
-// 			index++
-// 			return true
-// 		})
-// 		tr.sane()
-// 		for i := 0; i < len(items); i++ {
-// 			if tr.Delete(items[i]).(int) != items[i] {
-// 				panic("!")
-// 			}
-// 			if i%97 == 0 {
-// 				tr.sane()
-// 			}
-// 			if tr.Delete(items[i]) != nil {
-// 				panic("!")
-// 			}
-// 		}
-// 		if tr.Len() != 0 {
-// 			panic("!")
-// 		}
-// 		tr.sane()
-// 		for i := 0; i < len(items); i++ {
-// 			if tr.Delete(items[i]) != nil {
-// 				panic("!")
-// 			}
-// 		}
-// 		tr.sane()
-// 		tr.Ascend(nil, func(item interface{}) bool {
-// 			panic("!")
-// 		})
-// 	}
-// }
+	n = 0
+	for i := 0; i < 1000; i++ {
+		n = 0
+		tr.Reverse(func(item kind) bool {
+			if n == i {
+				return false
+			}
+			n++
+			return true
+		})
+		if n != i {
+			t.Fatalf("expected %d, got %d", i, n)
+		}
+	}
 
-// func TestBTree(t *testing.T) {
-// 	N := 10000
-// 	tr := New(pairLess)
-// 	tr.sane()
-// 	keys := randKeys(N)
+	sortItems(keys)
+	for i := 0; i < len(keys); i++ {
+		var res kind
+		var j int
+		tr.Ascend(keys[i], func(item kind) bool {
+			if j == 0 {
+				res = item
+			}
+			j++
+			return j == i%500
+		})
+		if !tr.eq(res, keys[i]) {
+			t.Fatal("not equal")
+		}
+	}
+	for i := len(keys) - 1; i >= 0; i-- {
+		var res kind
+		var j int
+		tr.Descend(keys[i], func(item kind) bool {
+			if j == 0 {
+				res = item
+			}
+			j++
+			return j == i%500
+		})
+		if !tr.eq(res, keys[i]) {
+			t.Fatal("not equal")
+		}
+	}
 
-// 	// insert all items
-// 	for _, key := range keys {
-// 		item := tr.Set(pair{key, key})
-// 		tr.sane()
-// 		if item != nil {
-// 			t.Fatal("expected nil")
-// 		}
-// 	}
+	if tr.Height() == 0 {
+		t.Fatalf("expected non-zero")
+	}
+	if v, ok := tr.Min(); !ok || !tr.eq(v, keys[0]) {
+		t.Fatalf("expected '%v', got '%v'", keys[0], v)
+	}
+	if v, ok := tr.Max(); !ok || !tr.eq(v, keys[len(keys)-1]) {
+		t.Fatalf("expected '%v', got '%v'", keys[len(keys)-1], v)
+	}
+	if v, ok := tr.PopMin(); !ok || !tr.eq(v, keys[0]) {
+		t.Fatalf("expected '%v', got '%v'", keys[0], v)
+	}
+	tr.sane()
+	if v, ok := tr.PopMax(); !ok || !tr.eq(v, keys[len(keys)-1]) {
+		t.Fatalf("expected '%v', got '%v'", keys[len(keys)-1], v)
+	}
+	tr.sane()
+	tr.Set(keys[0])
+	tr.Set(keys[len(keys)-1])
+	shuffleItems(keys)
+	var hint PathHint
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Get(keys[i]); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected '%v', got '%v'", keys[i], v)
+		}
+		if v, ok := tr.GetHint(keys[i], &hint); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected '%v', got '%v'", keys[i], v)
+		}
+	}
+	sortItems(keys)
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.PopMin(); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected '%v', got '%v'", keys[i], v)
+		}
+	}
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Set(keys[i]); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+	}
+	for i := len(keys) - 1; i >= 0; i-- {
+		if v, ok := tr.PopMax(); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected '%v', got '%v'", keys[i], v)
+		}
+	}
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Set(keys[i]); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+	}
+	if v, ok := tr.Delete(testMakeItem(-1)); ok || !tr.eq(v, tr.empty) {
+		t.Fatal("expected nil")
+	}
+	tr.sane()
+	shuffleItems(keys)
+	if v, ok := tr.Delete(keys[len(keys)/2]); !ok || !tr.eq(v, keys[len(keys)/2]) {
+		t.Fatalf("expected '%v', got '%v'", keys[len(keys)/2], v)
+	}
+	tr.sane()
+	if v, ok := tr.Delete(keys[len(keys)/2]); ok || !tr.eq(v, tr.empty) {
+		t.Fatalf("expected '%v', got '%v'", tr.empty, v)
+	}
+	tr.sane()
+	tr.Set(keys[len(keys)/2])
+	tr.sane()
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Delete(keys[i]); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected '%v', got '%v'", keys[i], v)
+		}
+		if v, ok := tr.Get(keys[i]); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+		if v, ok := tr.GetHint(keys[i], &hint); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+		if i%97 == 0 {
+			tr.sane()
+		}
+	}
+	if tr.Height() != 0 {
+		t.Fatalf("expected 0, got %d", tr.Height())
+	}
+	shuffleItems(keys)
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Load(keys[i]); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+		if i%97 == 0 {
+			tr.sane()
+		}
+	}
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Get(keys[i]); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected '%v', got '%v'", keys[i], v)
+		}
+	}
+	shuffleItems(keys)
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Delete(keys[i]); !ok || !tr.eq(v, keys[i]) {
+			t.Fatalf("expected '%v', got '%v'", keys[i], v)
+		}
+		if v, ok := tr.Get(keys[i]); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+	}
+	sortItems(keys)
+	for i := 0; i < len(keys); i++ {
+		if v, ok := tr.Load(keys[i]); ok || !tr.eq(v, tr.empty) {
+			t.Fatalf("expected nil")
+		}
+		if i%97 == 0 {
+			tr.sane()
+		}
+	}
+	shuffleItems(keys)
+	if v, ok := tr.Load(keys[0]); !ok || !tr.eq(v, keys[0]) {
+		t.Fatalf("expected '%v', got '%v'", keys[0], v)
+	}
+	tr.sane()
+}
 
-// 	// check length
-// 	if tr.Len() != len(keys) {
-// 		t.Fatalf("expected %v, got %v", len(keys), tr.Len())
-// 	}
+func TestLess(t *testing.T) {
+	tr := testNewBTree()
+	if !tr.Less(testMakeItem(1), testMakeItem(2)) {
+		panic("invalid")
+	}
+	if tr.Less(testMakeItem(2), testMakeItem(1)) {
+		panic("invalid")
+	}
+	if tr.Less(testMakeItem(1), testMakeItem(1)) {
+		panic("invalid")
+	}
+}
 
-// 	// get each value
-// 	for _, key := range keys {
-// 		item := tr.Get(pair{key, nil})
-// 		if item == nil || item.(pair).value != key {
-// 			t.Fatalf("expected '%v', got '%v'", key, item.(pair).value)
-// 		}
-// 	}
+func TestDeleteRandom(t *testing.T) {
+	N := 2_000_000
+	tr := testNewBTree()
+	for i := 0; i < N; i++ {
+		tr.Load(testMakeItem(i))
+	}
+	tr.sane()
+	for tr.Len() > 0 {
+		var item kind
+		var ok bool
+		switch rand.Int() % 3 {
+		case 0:
+			item, ok = tr.GetAt(tr.Len() / 2)
+		case 1:
+			item, ok = tr.Min()
+		case 2:
+			item, ok = tr.Max()
+		}
+		if !ok {
+			panic("!")
+		}
+		v, ok := tr.Delete(item)
+		if !ok || !tr.eq(v, item) {
+			panic("!")
+		}
+	}
+}
 
-// 	// scan all items
-// 	var last string
-// 	all := make(map[string]interface{})
-// 	tr.Ascend(nil, func(item interface{}) bool {
-// 		key := item.(pair).key
-// 		value := item.(pair).value
-// 		if key <= last {
-// 			t.Fatal("out of order")
-// 		}
-// 		if value.(string) != key {
-// 			t.Fatalf("mismatch")
-// 		}
-// 		last = key
-// 		all[key] = value
-// 		return true
-// 	})
-// 	if len(all) != len(keys) {
-// 		t.Fatalf("expected '%v', got '%v'", len(keys), len(all))
-// 	}
+func TestDeleteAt(t *testing.T) {
+	N := 10_000
+	tr := testNewBTree()
+	keys := randKeys(N)
+	for _, key := range keys {
+		tr.Set(key)
+	}
+	tr.sane()
+	for tr.Len() > 0 {
+		index := rand.Intn(tr.Len())
+		item1, ok1 := tr.GetAt(index)
+		item2, ok2 := tr.DeleteAt(index)
+		if !ok1 || !ok2 || !tr.eq(item1, item2) {
+			panic("mismatch")
+		}
+		tr.sane()
+	}
+}
 
-// 	// reverse all items
-// 	var prev string
-// 	all = make(map[string]interface{})
-// 	tr.Descend(nil, func(item interface{}) bool {
-// 		key := item.(pair).key
-// 		value := item.(pair).value
-// 		if prev != "" && key >= prev {
-// 			t.Fatal("out of order")
-// 		}
-// 		if value.(string) != key {
-// 			t.Fatalf("mismatch")
-// 		}
-// 		prev = key
-// 		all[key] = value
-// 		return true
-// 	})
-// 	if len(all) != len(keys) {
-// 		t.Fatalf("expected '%v', got '%v'", len(keys), len(all))
-// 	}
+func TestCopy(t *testing.T) {
+	items := randKeys(100000)
+	itemsM := testNewBTree()
+	for i := 0; i < len(items); i++ {
+		itemsM.Set(items[i])
+	}
+	tr := testNewBTree()
+	for i := 0; i < len(items); i++ {
+		tr.Set(items[i])
+	}
+	var wait int32
+	var testCopyDeep func(tr *BTree[kind], parent bool)
 
-// 	// try to get an invalid item
-// 	item := tr.Get(pair{"invalid", nil})
-// 	if item != nil {
-// 		t.Fatal("expected nil")
-// 	}
+	testCopyDeep = func(tr *BTree[kind], parent bool) {
+		defer func() { atomic.AddInt32(&wait, -1) }()
+		if parent {
+			// 2 grandchildren
+			for i := 0; i < 2; i++ {
+				atomic.AddInt32(&wait, 1)
+				go testCopyDeep(tr.Copy(), false)
+			}
+		}
 
-// 	// scan and quit at various steps
-// 	for i := 0; i < 100; i++ {
-// 		var j int
-// 		tr.Ascend(nil, func(item interface{}) bool {
-// 			if j == i {
-// 				return false
-// 			}
-// 			j++
-// 			return true
-// 		})
-// 	}
+		items2 := make([]kind, 10000)
+		for i := 0; i < len(items2); i++ {
+			x := testMakeItem(rand.Int())
+			_, ok := itemsM.Get(x)
+			for ok {
+				x = testMakeItem(rand.Int())
+				_, ok = itemsM.Get(x)
+			}
+			items2[i] = x
+		}
+		for i := 0; i < len(items2); i++ {
+			if v, ok := tr.Set(items2[i]); ok || !tr.eq(v, tr.empty) {
+				panic("!")
+			}
+		}
+		tr.sane()
+		if tr.Len() != len(items)+len(items2) {
+			panic("!")
+		}
+		for i := 0; i < len(items); i++ {
+			if v, ok := tr.Get(items[i]); !ok || !tr.eq(v, items[i]) {
+				panic("!")
+			}
+		}
+		for i := 0; i < len(items2); i++ {
+			if v, ok := tr.Get(items2[i]); !ok || !tr.eq(v, items2[i]) {
+				panic("!")
+			}
+		}
 
-// 	// reverse and quit at various steps
-// 	for i := 0; i < 100; i++ {
-// 		var j int
-// 		tr.Descend(nil, func(item interface{}) bool {
-// 			if j == i {
-// 				return false
-// 			}
-// 			j++
-// 			return true
-// 		})
-// 	}
+		for i := 0; i < len(items); i++ {
+			if v, ok := tr.Delete(items[i]); !ok || !tr.eq(v, items[i]) {
+				panic("!")
+			}
+		}
+		tr.sane()
+		if tr.Len() != len(items2) {
+			panic("!")
+		}
+		for i := 0; i < len(items2); i++ {
+			if v, ok := tr.Get(items2[i]); !ok || !tr.eq(v, items2[i]) {
+				panic("!")
+			}
+		}
+		sortItems(items2)
+		var i int
+		for len(items2) > 0 {
+			if i%2 == 0 {
+				if v, ok := tr.PopMin(); !ok || !tr.eq(v, items2[0]) {
+					panic("!")
+				}
+				items2 = items2[1:]
+			} else {
+				if v, ok := tr.PopMax(); !ok || !tr.eq(v, items2[len(items2)-1]) {
+					panic("!")
+				}
+				items2 = items2[:len(items2)-1]
+			}
+			if i%123 == 0 {
+				tr.sane()
+				if tr.Len() != len(items2) {
+					panic("!")
+				}
+				for i := 0; i < len(items2); i++ {
+					if v, ok := tr.Get(items2[i]); !ok || !tr.eq(v, items2[i]) {
+						panic("!")
+					}
+				}
+			}
+			i++
+		}
+		tr.sane()
+		if tr.Len() != len(items2) {
+			panic("!")
+		}
+	}
 
-// 	// delete half the items
-// 	for _, key := range keys[:len(keys)/2] {
-// 		item = tr.Delete(pair{key, nil})
-// 		if item == nil {
-// 			t.Fatal("expected true")
-// 		}
-// 		value := item.(pair).value
-// 		if value == nil || value.(string) != key {
-// 			t.Fatalf("expected '%v', got '%v'", key, value)
-// 		}
-// 	}
+	// 10 children
+	for i := 0; i < 10; i++ {
+		atomic.AddInt32(&wait, 1)
+		go testCopyDeep(tr.Copy(), true)
+	}
 
-// 	// check length
-// 	if tr.Len() != len(keys)/2 {
-// 		t.Fatalf("expected %v, got %v", len(keys)/2, tr.Len())
-// 	}
+	for atomic.LoadInt32(&wait) > 0 {
+		tr.sane()
+		if tr.Len() != len(items) {
+			panic("!")
+		}
+		for i := 0; i < len(items); i++ {
+			if v, ok := tr.Get(items[i]); !ok || !tr.eq(v, items[i]) {
+				panic("!")
+			}
+		}
+		runtime.Gosched()
+	}
+}
 
-// 	// try delete half again
-// 	for _, key := range keys[:len(keys)/2] {
-// 		item := tr.Delete(pair{key, nil})
-// 		tr.sane()
-// 		if item != nil {
-// 			t.Fatal("expected false")
-// 		}
-// 	}
+func TestVarious(t *testing.T) {
+	N := 1_000_000
+	tr := testNewBTree()
+	var hint PathHint
+	for _, i := range randKeys(N) {
+		if v, ok := tr.SetHint(i, &hint); ok || !tr.eq(v, tr.empty) {
+			panic("!")
+		}
+	}
+	for _, i := range randKeys(N) {
+		if v, ok := tr.GetHint(i, &hint); !ok || !tr.eq(v, i) {
+			panic("!")
+		}
+	}
+	for _, i := range randKeys(N) {
+		if v, ok := tr.DeleteHint(i, &hint); !ok || !tr.eq(v, i) {
+			panic("!")
+		}
+	}
+	if v, ok := tr.DeleteAt(0); ok || !tr.eq(v, tr.empty) {
+		panic("!")
+	}
+	if v, ok := tr.GetAt(0); ok || !tr.eq(v, tr.empty) {
+		panic("!")
+	}
+	for i := 0; i < N; i++ {
+		item := testMakeItem(i)
+		if v, ok := tr.SetHint(item, &hint); ok || !tr.eq(v, tr.empty) {
+			panic("!")
+		}
+		item = testMakeItem(i)
+		if v, ok := tr.SetHint(item, &hint); !ok || !tr.eq(v, item) {
+			panic("!")
+		}
+		item = testMakeItem(i)
+		if v, ok := tr.SetHint(item, &hint); !ok || !tr.eq(v, item) {
+			panic("!")
+		}
+	}
+	for i := 0; i < N; i++ {
+		item := testMakeItem(i)
+		if v, ok := tr.GetHint(item, &hint); !ok || !tr.eq(v, item) {
+			panic("!")
+		}
+	}
+	for i := 0; i < 100; i++ {
+		var count int
+		tr.Walk(func(_ []kind) bool {
+			if count == i {
+				return false
+			}
+			count++
+			return true
+		})
+	}
 
-// 	// try delete half again
-// 	for _, key := range keys[:len(keys)/2] {
-// 		item := tr.Delete(pair{key, nil})
-// 		tr.sane()
-// 		if item != nil {
-// 			t.Fatal("expected false")
-// 		}
-// 	}
+	for i := 0; i < N; i++ {
+		item := testMakeItem(i)
+		if v, ok := tr.DeleteHint(item, &hint); !ok || !tr.eq(v, item) {
+			panic("!")
+		}
+	}
+}
 
-// 	// check length
-// 	if tr.Len() != len(keys)/2 {
-// 		t.Fatalf("expected %v, got %v", len(keys)/2, tr.Len())
-// 	}
+func (tr *BTree[T]) sane() {
+	if err := tr.Sane(); err != nil {
+		panic(err)
+	}
+}
 
-// 	// scan items
-// 	last = ""
-// 	all = make(map[string]interface{})
-// 	tr.Ascend(nil, func(item interface{}) bool {
-// 		key := item.(pair).key
-// 		value := item.(pair).value
-// 		if key <= last {
-// 			t.Fatal("out of order")
-// 		}
-// 		if value.(string) != key {
-// 			t.Fatalf("mismatch")
-// 		}
-// 		last = key
-// 		all[key] = value
-// 		return true
-// 	})
-// 	if len(all) != len(keys)/2 {
-// 		t.Fatalf("expected '%v', got '%v'", len(keys), len(all))
-// 	}
+type saneError string
 
-// 	// replace second half
-// 	for _, key := range keys[len(keys)/2:] {
-// 		// println("set >>", key)
-// 		// tr.print(func(v interface{}) string { return v.(pair).key })
-// 		item := tr.Set(pair{key, key})
-// 		// tr.print(func(v interface{}) string { return v.(pair).key })
-// 		tr.sane()
-// 		if item == nil {
-// 			t.Fatal("expected not nil")
-// 		}
-// 		value := item.(pair).value
-// 		if value == nil || value.(string) != key {
-// 			t.Fatalf("expected '%v', got '%v'", key, value)
-// 		}
-// 	}
+func (err saneError) Error() string {
+	return string(err)
+}
 
-// 	// delete next half the items
-// 	for _, key := range keys[len(keys)/2:] {
-// 		item := tr.Delete(pair{key, nil})
-// 		tr.sane()
-// 		if item == nil {
-// 			t.Fatal("expected not nil")
-// 		}
-// 		value := item.(pair).value
-// 		if value == nil || value.(string) != key {
-// 			t.Fatalf("expected '%v', got '%v'", key, value)
-// 		}
-// 	}
+// btree_sane returns true if the entire btree and every node are valid.
+// - height of all leaves are the equal to the btree height.
+// - deep count matches the btree count.
+// - all nodes have the correct number of items and counts.
+// - all items are in order.
+func (tr *BTree[T]) Sane() error {
+	if tr == nil {
+		return nil
+	}
+	if !tr.saneheight() {
+		return saneError("!sane-height")
+	}
+	if tr.Len() != tr.count || tr.deepcount() != tr.count {
+		return saneError("!sane-count")
+	}
+	if !tr.saneprops() {
+		return saneError("!sane-props")
+	}
+	if !tr.saneorder() {
+		return saneError("!sane-order")
+	}
+	if !tr.sanenils() {
+		return saneError("!sane-nils")
+	}
+	return nil
+}
 
-// 	// check length
-// 	if tr.Len() != 0 {
-// 		t.Fatalf("expected %v, got %v", 0, tr.Len())
-// 	}
+// btree_saneheight returns true if the height of all leaves match the height
+// of the btree.
+func (tr *BTree[T]) saneheight() bool {
+	height := tr.Height()
+	if tr.root != nil {
+		if height == 0 {
+			return false
+		}
+		return tr.root.saneheight(1, height)
+	}
+	return height == 0
+}
 
-// 	// do some stuff on an empty tree
-// 	item = tr.Get(pair{keys[0], nil})
-// 	if item != nil {
-// 		t.Fatal("expected nil")
-// 	}
-// 	tr.Ascend(nil, func(item interface{}) bool {
-// 		t.Fatal("should not be reached")
-// 		return true
-// 	})
-// 	tr.Descend(nil, func(item interface{}) bool {
-// 		t.Fatal("should not be reached")
-// 		return true
-// 	})
+func (n *node[T]) saneheight(height, maxheight int) bool {
+	if n.leaf() {
+		if height != maxheight {
+			return false
+		}
+	} else {
+		i := 0
+		for ; i < len(n.items); i++ {
+			if !(*n.children)[i].saneheight(height+1, maxheight) {
+				return false
+			}
+		}
+		if !(*n.children)[i].saneheight(height+1, maxheight) {
+			return false
+		}
+	}
+	return true
+}
 
-// 	item = tr.Delete(pair{"invalid", nil})
-// 	tr.sane()
-// 	if item != nil {
-// 		t.Fatal("expected nil")
-// 	}
-// }
+// btree_deepcount returns the number of items in the btree.
+func (tr *BTree[T]) deepcount() int {
+	if tr.root != nil {
+		return tr.root.deepcount()
+	}
+	return 0
+}
 
-// // btree_sane returns true if the entire btree and every node are valid.
-// // - height of all leaves are the equal to the btree height.
-// // - deep count matches the btree count.
-// // - all nodes have the correct number of items and counts.
-// // - all items are in order.
-// func (tr *BTree) sane() {
-// 	if err := tr.base.Sane(); err != nil {
-// 		panic(err)
-// 	}
-// }
+func (n *node[T]) deepcount() int {
+	count := len(n.items)
+	if !n.leaf() {
+		for i := 0; i <= len(n.items); i++ {
+			count += (*n.children)[i].deepcount()
+		}
+	}
+	if n.count != count {
+		return -1
+	}
+	return count
+}
 
-// func TestBTreeOne(t *testing.T) {
-// 	tr := New(pairLess)
-// 	tr.Set(pair{"1", "1"})
-// 	tr.Delete(pair{"1", nil})
-// 	tr.Set(pair{"1", "1"})
-// 	tr.Delete(pair{"1", nil})
-// 	tr.Set(pair{"1", "1"})
-// 	tr.Delete(pair{"1", nil})
-// }
+func (tr *BTree[T]) nodesaneprops(n *node[T], height int) bool {
+	if height == 1 {
+		if len(n.items) < 1 || len(n.items) > maxItems {
+			println(len(n.items) < 1)
+			return false
+		}
+	} else {
+		if len(n.items) < minItems || len(n.items) > maxItems {
+			println(2)
+			return false
+		}
+	}
+	if !n.leaf() {
+		if len(*n.children) != len(n.items)+1 {
+			println(3)
+			return false
+		}
+		for i := 0; i < len(n.items); i++ {
+			if !tr.nodesaneprops((*n.children)[i], height+1) {
+				println(4)
+				return false
+			}
+		}
+		if !tr.nodesaneprops((*n.children)[len(n.items)], height+1) {
+			println(5)
+			return false
+		}
+	}
+	return true
+}
 
-// func TestBTree256(t *testing.T) {
-// 	tr := New(pairLess)
-// 	var n int
-// 	for j := 0; j < 2; j++ {
-// 		for _, i := range rand.Perm(256) {
-// 			tr.Set(pair{fmt.Sprintf("%d", i), i})
-// 			n++
-// 			if tr.Len() != n {
-// 				t.Fatalf("expected 256, got %d", n)
-// 			}
-// 		}
-// 		for _, i := range rand.Perm(256) {
-// 			item := tr.Get(pair{fmt.Sprintf("%d", i), nil})
-// 			if item == nil {
-// 				t.Fatal("expected true")
-// 			}
-// 			if item.(pair).value.(int) != i {
-// 				t.Fatalf("expected %d, got %d", i, item.(pair).value.(int))
-// 			}
-// 		}
-// 		for _, i := range rand.Perm(256) {
-// 			tr.Delete(pair{fmt.Sprintf("%d", i), nil})
-// 			n--
-// 			if tr.Len() != n {
-// 				t.Fatalf("expected 256, got %d", n)
-// 			}
-// 		}
-// 		for _, i := range rand.Perm(256) {
-// 			item := tr.Get(pair{fmt.Sprintf("%d", i), nil})
-// 			if item != nil {
-// 				t.Fatal("expected nil")
-// 			}
-// 		}
-// 	}
-// }
+func (tr *BTree[T]) saneprops() bool {
+	if tr.root != nil {
+		return tr.nodesaneprops(tr.root, 1)
+	}
+	return true
+}
 
-// func shuffle(r *rand.Rand, keys []int) {
-// 	for i := range keys {
-// 		j := r.Intn(i + 1)
-// 		keys[i], keys[j] = keys[j], keys[i]
-// 	}
-// }
+func (tr *BTree[T]) sanenilsnode(n *node[T]) bool {
+	items := n.items[:cap(n.items):cap(n.items)]
+	for i := len(n.items); i < len(items); i++ {
+		if !tr.eq(items[i], tr.empty) {
+			return false
+		}
+	}
+	if !n.leaf() {
+		for i := 0; i < len(*n.children); i++ {
+			if (*n.children)[i] == nil {
+				return false
+			}
+		}
+		children := (*n.children)[:cap(*n.children):cap(*n.children)]
+		for i := len(*n.children); i < len(children); i++ {
+			if children[i] != nil {
+				return false
+			}
+		}
+		for i := 0; i < len(*n.children); i++ {
+			if !tr.sanenilsnode((*n.children)[i]) {
+				return false
+			}
+		}
+	}
+	return true
+}
 
-// func intLess(a, b interface{}) bool {
-// 	return a.(int) < b.(int)
-// }
+// sanenils checks that all the slots in the item slice that are not used,
+//   n.items[len(n.items):cap(n.items):cap(n.items)]
+// are equal to the empty value of the kind.
+func (tr *BTree[T]) sanenils() bool {
+	if tr.root != nil {
+		return tr.sanenilsnode(tr.root)
+	}
+	return true
+}
 
-// func TestRandom(t *testing.T) {
-// 	r := rand.New(rand.NewSource(seed))
-// 	N := 200000
-// 	keys := rand.Perm(N)
-// 	func() {
-// 		defer func() {
-// 			msg := fmt.Sprint(recover())
-// 			if msg != "nil less" {
-// 				t.Fatal("expected 'nil less' panic")
-// 			}
-// 		}()
-// 		New(nil)
-// 		t.Fatalf("reached invalid code")
-// 	}()
-// 	tr := New(intLess)
-// 	checkSane := func() {
-// 		// tr.sane()
-// 	}
-// 	checkSane()
-// 	if tr.Min() != nil {
-// 		t.Fatalf("expected nil")
-// 	}
-// 	if tr.Max() != nil {
-// 		t.Fatalf("expected nil")
-// 	}
-// 	if tr.PopMin() != nil {
-// 		t.Fatalf("expected nil")
-// 	}
-// 	if tr.PopMax() != nil {
-// 		t.Fatalf("expected nil")
-// 	}
-// 	if tr.Height() != 0 {
-// 		t.Fatalf("expected 0, got %d", tr.Height())
-// 	}
-// 	checkSane()
-// 	func() {
-// 		defer func() {
-// 			msg := fmt.Sprint(recover())
-// 			if msg != "nil item" {
-// 				t.Fatal("expected 'nil item' panic")
-// 			}
-// 		}()
-// 		tr.Set(nil)
-// 		t.Fatalf("reached invalid code")
-// 	}()
-// 	// keys = keys[:rand.Intn(len(keys))]
-// 	shuffle(r, keys)
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Set(keys[i])
-// 		checkSane()
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 		if i%12345 == 0 {
-// 			tr.sane()
-// 		}
-// 	}
-// 	tr.sane()
-// 	sort.Ints(keys)
-// 	var n int
-// 	tr.Ascend(nil, func(item interface{}) bool {
-// 		n++
-// 		return false
-// 	})
-// 	if n != 1 {
-// 		t.Fatalf("expected 1, got %d", n)
-// 	}
-
-// 	n = 0
-// 	tr.Ascend(nil, func(item interface{}) bool {
-// 		if item != keys[n] {
-// 			t.Fatalf("expected %d, got %d", keys[n], item)
-// 		}
-// 		n++
-// 		return true
-// 	})
-// 	if n != len(keys) {
-// 		t.Fatalf("expected %d, got %d", len(keys), n)
-// 	}
-// 	if tr.Len() != len(keys) {
-// 		t.Fatalf("expected %d, got %d", tr.Len(), len(keys))
-// 	}
-
-// 	for i := 0; i < tr.Len(); i++ {
-// 		item := tr.GetAt(i)
-// 		if item != keys[i] {
-// 			t.Fatalf("expected %d, got %d", keys[i], item)
-// 		}
-// 	}
-
-// 	n = 0
-// 	tr.Descend(nil, func(item interface{}) bool {
-// 		n++
-// 		return false
-// 	})
-// 	if n != 1 {
-// 		t.Fatalf("expected 1, got %d", n)
-// 	}
-// 	n = 0
-// 	tr.Descend(nil, func(item interface{}) bool {
-// 		if item != keys[len(keys)-n-1] {
-// 			t.Fatalf("expected %d, got %d", keys[len(keys)-n-1], item)
-// 		}
-// 		n++
-// 		return true
-// 	})
-// 	if n != len(keys) {
-// 		t.Fatalf("expected %d, got %d", len(keys), n)
-// 	}
-// 	if tr.Len() != len(keys) {
-// 		t.Fatalf("expected %d, got %d", tr.Len(), len(keys))
-// 	}
-
-// 	checkSane()
-
-// 	// tr.deepPrint()
-
-// 	n = 0
-// 	for i := 0; i < 1000; i++ {
-// 		n := 0
-// 		tr.Ascend(nil, func(item interface{}) bool {
-// 			if n == i {
-// 				return false
-// 			}
-// 			n++
-// 			return true
-// 		})
-// 		if n != i {
-// 			t.Fatalf("expected %d, got %d", i, n)
-// 		}
-// 	}
-
-// 	n = 0
-// 	for i := 0; i < 1000; i++ {
-// 		n = 0
-// 		tr.Descend(nil, func(item interface{}) bool {
-// 			if n == i {
-// 				return false
-// 			}
-// 			n++
-// 			return true
-// 		})
-// 		if n != i {
-// 			t.Fatalf("expected %d, got %d", i, n)
-// 		}
-// 	}
-
-// 	sort.Ints(keys)
-// 	for i := 0; i < len(keys); i++ {
-// 		var res interface{}
-// 		var j int
-// 		tr.Ascend(keys[i], func(item interface{}) bool {
-// 			if j == 0 {
-// 				res = item
-// 			}
-// 			j++
-// 			return j == i%500
-// 		})
-// 		if res != keys[i] {
-// 			t.Fatal("not equal")
-// 		}
-// 	}
-// 	for i := len(keys) - 1; i >= 0; i-- {
-// 		var res interface{}
-// 		var j int
-// 		tr.Descend(keys[i], func(item interface{}) bool {
-// 			if j == 0 {
-// 				res = item
-// 			}
-// 			j++
-// 			return j == i%500
-// 		})
-// 		if res != keys[i] {
-// 			t.Fatal("not equal")
-// 		}
-// 	}
-
-// 	if tr.Height() == 0 {
-// 		t.Fatalf("expected non-zero")
-// 	}
-// 	if tr.Min() != keys[0] {
-// 		t.Fatalf("expected '%v', got '%v'", keys[0], tr.Min())
-// 	}
-// 	if tr.Max() != keys[len(keys)-1] {
-// 		t.Fatalf("expected '%v', got '%v'", keys[len(keys)-1], tr.Max())
-// 	}
-// 	min := tr.PopMin()
-// 	checkSane()
-// 	if min != keys[0] {
-// 		t.Fatalf("expected '%v', got '%v'", keys[0], min)
-// 	}
-// 	max := tr.PopMax()
-// 	checkSane()
-// 	if max != keys[len(keys)-1] {
-// 		t.Fatalf("expected '%v', got '%v'", keys[len(keys)-1], max)
-// 	}
-// 	tr.Set(min)
-// 	tr.Set(max)
-// 	shuffle(r, keys)
-// 	var hint PathHint
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Get(keys[i])
-// 		if prev == nil || prev.(int) != keys[i] {
-// 			t.Fatalf("expected '%v', got '%v'", keys[i], prev)
-// 		}
-// 		prev = tr.GetHint(keys[i], &hint)
-// 		if prev == nil || prev.(int) != keys[i] {
-// 			t.Fatalf("expected '%v', got '%v'", keys[i], prev)
-// 		}
-// 	}
-// 	sort.Ints(keys)
-// 	for i := 0; i < len(keys); i++ {
-// 		item := tr.PopMin()
-// 		if item != keys[i] {
-// 			t.Fatalf("expected '%v', got '%v'", keys[i], item)
-// 		}
-// 	}
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Set(keys[i])
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 	}
-// 	for i := len(keys) - 1; i >= 0; i-- {
-// 		item := tr.PopMax()
-// 		if item != keys[i] {
-// 			t.Fatalf("expected '%v', got '%v'", keys[i], item)
-// 		}
-// 	}
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Set(keys[i])
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 	}
-
-// 	if tr.Delete(nil) != nil {
-// 		t.Fatal("expected nil")
-// 	}
-// 	checkSane()
-
-// 	shuffle(r, keys)
-// 	item := tr.Delete(keys[len(keys)/2])
-// 	checkSane()
-// 	if item != keys[len(keys)/2] {
-// 		t.Fatalf("expected '%v', got '%v'", keys[len(keys)/2], item)
-// 	}
-// 	item2 := tr.Delete(keys[len(keys)/2])
-// 	checkSane()
-// 	if item2 != nil {
-// 		t.Fatalf("expected '%v', got '%v'", nil, item2)
-// 	}
-
-// 	tr.Set(item)
-// 	checkSane()
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Delete(keys[i])
-// 		checkSane()
-// 		if prev == nil || prev.(int) != keys[i] {
-// 			t.Fatalf("expected '%v', got '%v'", keys[i], prev)
-// 		}
-// 		prev = tr.Get(keys[i])
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 		prev = tr.GetHint(keys[i], &hint)
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 		if i%12345 == 0 {
-// 			tr.sane()
-// 		}
-// 	}
-// 	if tr.Height() != 0 {
-// 		t.Fatalf("expected 0, got %d", tr.Height())
-// 	}
-// 	shuffle(r, keys)
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Load(keys[i])
-// 		checkSane()
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 	}
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Get(keys[i])
-// 		if prev == nil || prev.(int) != keys[i] {
-// 			t.Fatalf("expected '%v', got '%v'", keys[i], prev)
-// 		}
-// 	}
-// 	shuffle(r, keys)
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Delete(keys[i])
-// 		checkSane()
-// 		if prev == nil || prev.(int) != keys[i] {
-// 			t.Fatalf("expected '%v', got '%v'", keys[i], prev)
-// 		}
-// 		prev = tr.Get(keys[i])
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 	}
-// 	sort.Ints(keys)
-// 	for i := 0; i < len(keys); i++ {
-// 		prev := tr.Load(keys[i])
-// 		checkSane()
-// 		if prev != nil {
-// 			t.Fatalf("expected nil")
-// 		}
-// 	}
-// 	shuffle(r, keys)
-// 	item = tr.Load(keys[0])
-// 	checkSane()
-// 	if item != keys[0] {
-// 		t.Fatalf("expected '%v', got '%v'", keys[0], item)
-// 	}
-// 	func() {
-// 		defer func() {
-// 			msg := fmt.Sprint(recover())
-// 			if msg != "nil item" {
-// 				t.Fatal("expected 'nil item' panic")
-// 			}
-// 		}()
-// 		tr.Load(nil)
-// 		checkSane()
-// 		t.Fatalf("reached invalid code")
-// 	}()
-// }
-
-// func TestLess(t *testing.T) {
-// 	tr := New(intLess)
-// 	if !tr.Less(1, 2) {
-// 		panic("invalid")
-// 	}
-// 	if tr.Less(2, 1) {
-// 		panic("invalid")
-// 	}
-// 	if tr.Less(1, 1) {
-// 		panic("invalid")
-// 	}
-// }
-
-// func TestDeleteAt(t *testing.T) {
-// 	N := 10_000
-// 	tr := New(intLess)
-// 	rand.Seed(0)
-// 	keys := rand.Perm(N)
-// 	for _, key := range keys {
-// 		tr.Set(key)
-// 	}
-// 	tr.sane()
-
-// 	for tr.Len() > 0 {
-// 		index := rand.Intn(tr.Len())
-// 		item1 := tr.GetAt(index)
-// 		item2 := tr.DeleteAt(index)
-// 		if item1 != item2 {
-// 			panic("mismatch")
-// 		}
-// 		tr.sane()
-// 	}
-// }
-
-// func randInts(N int) []int {
-// 	ints := make([]int, N)
-// 	for i := 0; i < N; i++ {
-// 		ints[i] = rand.Int()
-// 	}
-// 	return ints
-// }
-
-// func TestCopy(t *testing.T) {
-// 	items := randInts(100000)
-// 	itemsM := make(map[int]bool)
-// 	for i := 0; i < len(items); i++ {
-// 		itemsM[items[i]] = true
-// 	}
-// 	tr := New(func(a, b interface{}) bool { return a.(int) < b.(int) })
-// 	for i := 0; i < len(items); i++ {
-// 		tr.Set(items[i])
-// 	}
-// 	var wait int32
-// 	var testCopyDeep func(tr *BTree, parent bool)
-
-// 	testCopyDeep = func(tr *BTree, parent bool) {
-// 		defer func() { atomic.AddInt32(&wait, -1) }()
-// 		if parent {
-// 			// 2 grandchildren
-// 			for i := 0; i < 2; i++ {
-// 				atomic.AddInt32(&wait, 1)
-// 				go testCopyDeep(tr.Copy(), false)
-// 			}
-// 		}
-
-// 		items2 := make([]int, 10000)
-// 		for i := 0; i < len(items2); i++ {
-// 			x := rand.Int()
-// 			for itemsM[x] {
-// 				x = rand.Int()
-// 			}
-// 			items2[i] = x
-// 		}
-// 		for i := 0; i < len(items2); i++ {
-// 			if tr.Set(items2[i]) != nil {
-// 				panic("!")
-// 			}
-// 		}
-// 		tr.sane()
-// 		if tr.Len() != len(items)+len(items2) {
-// 			panic("!")
-// 		}
-// 		for i := 0; i < len(items); i++ {
-// 			if tr.Get(items[i]).(int) != items[i] {
-// 				panic("!")
-// 			}
-// 		}
-// 		for i := 0; i < len(items2); i++ {
-// 			if tr.Get(items2[i]).(int) != items2[i] {
-// 				panic("!")
-// 			}
-// 		}
-
-// 		for i := 0; i < len(items); i++ {
-// 			if tr.Delete(items[i]).(int) != items[i] {
-// 				panic("!")
-// 			}
-// 		}
-// 		tr.sane()
-// 		if tr.Len() != len(items2) {
-// 			panic("!")
-// 		}
-// 		for i := 0; i < len(items2); i++ {
-// 			if tr.Get(items2[i]).(int) != items2[i] {
-// 				panic("!")
-// 			}
-// 		}
-// 		sort.Ints(items2)
-// 		var i int
-// 		for len(items2) > 0 {
-// 			if i%2 == 0 {
-// 				if tr.PopMin().(int) != items2[0] {
-// 					panic("!")
-// 				}
-// 				items2 = items2[1:]
-// 			} else {
-// 				if tr.PopMax().(int) != items2[len(items2)-1] {
-// 					panic("!")
-// 				}
-// 				items2 = items2[:len(items2)-1]
-// 			}
-// 			if i%123 == 0 {
-// 				tr.sane()
-// 				if tr.Len() != len(items2) {
-// 					panic("!")
-// 				}
-// 				for i := 0; i < len(items2); i++ {
-// 					if tr.Get(items2[i]).(int) != items2[i] {
-// 						panic("!")
-// 					}
-// 				}
-// 			}
-// 			i++
-// 		}
-// 		tr.sane()
-// 		if tr.Len() != len(items2) {
-// 			panic("!")
-// 		}
-// 	}
-
-// 	// 10 children
-// 	for i := 0; i < 10; i++ {
-// 		atomic.AddInt32(&wait, 1)
-// 		go testCopyDeep(tr.Copy(), true)
-// 	}
-
-// 	for atomic.LoadInt32(&wait) > 0 {
-// 		tr.sane()
-// 		if tr.Len() != len(items) {
-// 			panic("!")
-// 		}
-// 		for i := 0; i < len(items); i++ {
-// 			if tr.Get(items[i]).(int) != items[i] {
-// 				panic("!")
-// 			}
-// 		}
-// 		runtime.Gosched()
-// 	}
-// }
-
-// func TestVarious(t *testing.T) {
-// 	N := 1_000_000
-// 	tr := NewNonConcurrent(func(a, b interface{}) bool {
-// 		return a.(int) < b.(int)
-// 	})
-// 	var hint PathHint
-// 	for _, i := range rand.Perm(N) {
-// 		if tr.SetHint(i, &hint) != nil {
-// 			panic("!")
-// 		}
-// 	}
-// 	for _, i := range rand.Perm(N) {
-// 		if tr.GetHint(i, &hint).(int) != i {
-// 			panic("!")
-// 		}
-// 	}
-// 	for _, i := range rand.Perm(N) {
-// 		if tr.DeleteHint(i, &hint).(int) != i {
-// 			panic("!")
-// 		}
-// 	}
-
-// 	if tr.DeleteAt(0) != nil {
-// 		panic("!")
-// 	}
-// 	if tr.GetAt(0) != nil {
-// 		panic("!")
-// 	}
-// 	for i := 0; i < N; i++ {
-// 		if tr.SetHint(i, &hint) != nil {
-// 			panic("!")
-// 		}
-// 		if tr.SetHint(i, &hint).(int) != i {
-// 			panic("!")
-// 		}
-// 		if tr.SetHint(i, &hint).(int) != i {
-// 			panic("!")
-// 		}
-// 	}
-// 	for i := 0; i < N; i++ {
-// 		if tr.GetHint(i, &hint).(int) != i {
-// 			panic("!")
-// 		}
-// 	}
-// 	for i := 0; i < N; i++ {
-// 		if tr.DeleteHint(i, &hint).(int) != i {
-// 			panic("!")
-// 		}
-// 	}
-
-// }
+func (tr *BTree[T]) saneorder() bool {
+	var last T
+	var count int
+	var bad bool
+	tr.Walk(func(items []T) bool {
+		for _, item := range items {
+			if count > 0 {
+				if !tr.Less(last, item) {
+					bad = true
+					return false
+				}
+			}
+			last = item
+			count++
+		}
+		return true
+	})
+	return !bad && count == tr.count
+}
