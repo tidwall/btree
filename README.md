@@ -161,7 +161,7 @@ DeleteAt(index)  # deletes the item at index
 
 This implementation was designed with performance in mind. 
 
-- `google`: The [google/btree](https://github.com/google/btree) package
+- `google`: The [google/btree](https://github.com/google/btree) package (without generics)
 - `tidwall`: The [tidwall/btree](https://github.com/tidwall/btree) package (without generics)
 - `tidwall(G)`: The [tidwall/btree](https://github.com/tidwall/btree/tree/generics) package (with generics)
 - `go-arr`: A simple Go array
