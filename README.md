@@ -4,6 +4,8 @@
 
 An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go. 
 
+*Check out the [generics branch](https://github.com/tidwall/btree/tree/generics) if you want to try out btree with generic support for Go 1.18+*
+
 ## Features
 
 - `Copy()` method with copy-on-write support.
