@@ -161,9 +161,9 @@ DeleteAt(index)  # deletes the item at index
 
 This implementation was designed with performance in mind. 
 
-- `google`: The [google/btree](https://github.com/google/btree) package
+- `google`: The [google/btree](https://github.com/google/btree) package (without generics)
 - `tidwall`: The [tidwall/btree](https://github.com/tidwall/btree) package (without generics)
-- `tidwall(G)`: The [tidwall/btree](https://github.com/tidwall/btree/tree/generics) package (with generics)
+- `tidwall(G)`: The [tidwall/btree](https://github.com/tidwall/btree) package (with generics)
 - `go-arr`: A simple Go array
 
 The following benchmarks were run on my 2019 Macbook Pro (2.4 GHz 8-Core Intel Core i9) 
@@ -179,7 +179,7 @@ tidwall:    set-seq-hint   1,000,000 ops in 75ms, 13,256,139/sec, 75 ns/op, 23.5
 tidwall(G): set-seq-hint   1,000,000 ops in 47ms, 21,073,524/sec, 47 ns/op, 8.2 MB, 8 bytes/op
 tidwall:    load-seq       1,000,000 ops in 47ms, 21,438,912/sec, 46 ns/op, 23.5 MB, 24 bytes/op
 tidwall(G): load-seq       1,000,000 ops in 23ms, 43,405,780/sec, 23 ns/op, 8.2 MB, 8 bytes/op
-go-arr:     append         1,000,000 ops in 71ms, 14,104,431/sec, 70 ns/op
+go-arr:     append         1,000,000 ops in 25ms, 40,684,212/sec, 24 ns/op
 
 ** random set **
 google:     set-rand       1,000,000 ops in 593ms, 1,685,165/sec, 593 ns/op, 29.7 MB, 31 bytes/op
