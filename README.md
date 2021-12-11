@@ -39,13 +39,13 @@ type Item struct {
 
 // byKeys is a comparison function that compares item keys and returns true
 // when a is less than b.
-func byKeys(a, b *Item) bool {
+func byKeys(a, b Item) bool {
 	return a.Key < b.Key
 }
 
 // byVals is a comparison function that compares item values and returns true
 // when a is less than b.
-func byVals(a, b *Item) bool {
+func byVals(a, b Item) bool {
 	if a.Val < b.Val {
 		return true
 	}
@@ -61,17 +61,17 @@ func main() {
 	// Create a tree for keys and a tree for values.
 	// The "keys" tree will be sorted on the Keys field.
 	// The "values" tree will be sorted on the Values field.
-	keys := btree.New[*Item](byKeys)
-	vals := btree.New[*Item](byVals)
+	keys := btree.New[Item](byKeys)
+	vals := btree.New[Item](byVals)
 
 	// Create some items.
-	users := []*Item{
-		&Item{Key: "user:1", Val: "Jane"},
-		&Item{Key: "user:2", Val: "Andy"},
-		&Item{Key: "user:3", Val: "Steve"},
-		&Item{Key: "user:4", Val: "Andrea"},
-		&Item{Key: "user:5", Val: "Janet"},
-		&Item{Key: "user:6", Val: "Andy"},
+	users := []Item{
+		Item{Key: "user:1", Val: "Jane"},
+		Item{Key: "user:2", Val: "Andy"},
+		Item{Key: "user:3", Val: "Steve"},
+		Item{Key: "user:4", Val: "Andrea"},
+		Item{Key: "user:5", Val: "Janet"},
+		Item{Key: "user:6", Val: "Andy"},
 	}
 
 	// Insert each user into both trees
@@ -81,14 +81,14 @@ func main() {
 	}
 
 	// Iterate over each user in the key tree
-	keys.Scan(func(item *Item) bool {
+	keys.Scan(func(item Item) bool {
 		fmt.Printf("%s %s\n", item.Key, item.Val)
 		return true
 	})
 
 	fmt.Printf("\n")
 	// Iterate over each user in the val tree
-	vals.Scan(func(item *Item) bool {
+	vals.Scan(func(item Item) bool {
 		fmt.Printf("%s %s\n", item.Key, item.Val)
 		return true
 	})
@@ -161,7 +161,7 @@ DeleteAt(index)  # deletes the item at index
 
 This implementation was designed with performance in mind. 
 
-- `google`: The [google/btree](https://github.com/google/btree) package (without generics)
+- `google`: The [google/btree](https://github.com/google/btree) package
 - `tidwall`: The [tidwall/btree](https://github.com/tidwall/btree) package (without generics)
 - `tidwall(G)`: The [tidwall/btree](https://github.com/tidwall/btree/tree/generics) package (with generics)
 - `go-arr`: A simple Go array
