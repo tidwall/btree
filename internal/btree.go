@@ -8,9 +8,7 @@
 
 package btree
 
-import (
-	"sync"
-)
+import "sync"
 
 // degree is the B-Tree degree, which is equal to maximum number of children
 // pre node times two.
@@ -42,8 +40,8 @@ type BTree = bTree
 type Options = bOptions
 type PathHint = bPathHint
 
-func New() *bTree                     { return bNew() }
-func NewOptions(opts bOptions) *bTree { return bNewOptions(opts) }
+func New(less func(a, b kind) bool) *bTree { return bNew() }
+func NewOptions(opts bOptions) *bTree      { return bNewOptions(opts) }
 
 // The functions below, which begin with "test*", are required by the
 // btree_test.go file. If you choose not use include the btree_test.go file in
@@ -161,13 +159,13 @@ func (tr *bTree) find(n *node, key kind,
 		high := len(n.items)
 		for low < high {
 			mid := (low + high) / 2
-			if !less(key, n.items[mid], tr.ctx) {
+			if !tr.Less(key, n.items[mid]) {
 				low = mid + 1
 			} else {
 				high = mid
 			}
 		}
-		if low > 0 && !less(n.items[low-1], key, tr.ctx) {
+		if low > 0 && !tr.Less(n.items[low-1], key) {
 			return low - 1, true
 		}
 		return low, false
@@ -182,18 +180,18 @@ func (tr *bTree) find(n *node, key kind,
 		index = int(hint.path[depth])
 		if index >= len(n.items) {
 			// tail item
-			if less(n.items[len(n.items)-1], key, tr.ctx) {
+			if tr.Less(n.items[len(n.items)-1], key) {
 				index = len(n.items)
 				goto path_match
 			}
 			index = len(n.items) - 1
 		}
-		if less(key, n.items[index], tr.ctx) {
-			if index == 0 || less(n.items[index-1], key, tr.ctx) {
+		if tr.Less(key, n.items[index]) {
+			if index == 0 || tr.Less(n.items[index-1], key) {
 				goto path_match
 			}
 			high = index - 1
-		} else if less(n.items[index], key, tr.ctx) {
+		} else if tr.Less(n.items[index], key) {
 			low = index + 1
 		} else {
 			found = true
@@ -208,7 +206,7 @@ func (tr *bTree) find(n *node, key kind,
 		mid := low + ((high+1)-low)/2
 		// if key >= n.items[mid], low = mid + 1
 		// which implies that key >= everything below low
-		if !less(key, n.items[mid], tr.ctx) {
+		if !tr.Less(key, n.items[mid]) {
 			low = mid + 1
 		} else {
 			high = mid - 1
@@ -220,7 +218,7 @@ func (tr *bTree) find(n *node, key kind,
 	// therefore key = n.items[low - 1],
 	// and we have found the entry for key.
 	// Otherwise we must keep searching for the key in index `low`.
-	if low > 0 && !less(n.items[low-1], key, tr.ctx) {
+	if low > 0 && !tr.Less(n.items[low-1], key) {
 		index = low - 1
 		found = true
 	} else {
@@ -743,7 +741,7 @@ func (tr *bTree) Load(item kind) (kind, bool) {
 		n.count++ // optimistically update counts
 		if n.leaf() {
 			if len(n.items) < maxItems-1 {
-				if less(n.items[len(n.items)-1], item, tr.ctx) {
+				if tr.Less(n.items[len(n.items)-1], item) {
 					n.items = append(n.items, item)
 					tr.count++
 					return tr.empty, false
