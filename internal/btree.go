@@ -740,7 +740,7 @@ func (tr *bTree) Load(item kind) (kind, bool) {
 	for {
 		n.count++ // optimistically update counts
 		if n.leaf() {
-			if len(n.items) < maxItems-1 {
+			if len(n.items) < maxItems {
 				if tr.Less(n.items[len(n.items)-1], item) {
 					n.items = append(n.items, item)
 					tr.count++
