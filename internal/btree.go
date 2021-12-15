@@ -81,8 +81,8 @@ func testNewBTree() *bTree {
 
 // Do not edit code below this line.
 
-const maxItems = degree*2 - 1        // max items per node. max children is +1
-const minItems = maxItems * 40 / 100 // min items per node. 40% the max
+const maxItems = degree*2 - 1 // max items per node. max children is +1
+const minItems = maxItems / 2
 
 type bTree struct {
 	mu    *sync.RWMutex
