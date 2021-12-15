@@ -8,7 +8,7 @@ import "sync"
 const (
 	degree   = 128
 	maxItems = degree*2 - 1 // max items per node. max children is +1
-	minItems = maxItems / 2 // min items per node. 40% the max
+	minItems = maxItems / 2
 )
 
 type BTree[T any] struct {
@@ -666,7 +666,7 @@ func (tr *BTree[T]) Load(item T) (T, bool) {
 	for {
 		n.count++ // optimistically update counts
 		if n.leaf() {
-			if len(n.items) < maxItems-1 {
+			if len(n.items) < maxItems {
 				if tr.Less(n.items[len(n.items)-1], item) {
 					n.items = append(n.items, item)
 					tr.count++
