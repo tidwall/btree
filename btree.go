@@ -7,8 +7,8 @@ import "sync"
 
 const (
 	degree   = 128
-	maxItems = degree*2 - 1        // max items per node. max children is +1
-	minItems = maxItems * 40 / 100 // min items per node. 40% the max
+	maxItems = degree*2 - 1 // max items per node. max children is +1
+	minItems = maxItems / 2 // min items per node. 40% the max
 )
 
 type BTree[T any] struct {
