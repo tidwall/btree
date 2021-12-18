@@ -85,8 +85,8 @@ func main() {
 		fmt.Printf("%s %s\n", item.Key, item.Val)
 		return true
 	})
-
 	fmt.Printf("\n")
+
 	// Iterate over each user in the val tree
 	vals.Scan(func(item Item) bool {
 		fmt.Printf("%s %s\n", item.Key, item.Val)
@@ -115,17 +115,20 @@ func main() {
 ### Basic
 
 ```
-Len()                   # return the number of items in the btree
-Set(item)               # insert or replace an existing item
 Get(item)               # get an existing item
+Set(item)               # insert or replace an existing item
 Delete(item)            # delete an item
+Len()                   # return the number of items in the btree
 ```
 
 ### Iteration
 
 ```
+Scan(iter)              # scan items in ascending order
+Reverse(iter)           # scan items in descending order
 Ascend(pivot, iter)     # scan items in ascending order starting at pivot.
 Descend(pivot, iter)    # scan items in descending order starting at pivot.
+Iter()                  # returns a read-only iterator for for-loops.
 ```
 
 ### Queues

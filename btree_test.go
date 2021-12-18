@@ -1206,3 +1206,91 @@ func (tr *BTree[T]) saneorder() bool {
 	})
 	return !bad && count == tr.count
 }
+
+func TestIter(t *testing.T) {
+	N := 100_000
+	tr := testNewBTree()
+	var all []testKind
+	for i := 0; i < N; i++ {
+		tr.Load(testMakeItem(i))
+		all = append(all, testMakeItem(i))
+	}
+	var count int
+	var i int
+	iter := tr.Iter()
+	for ok := iter.First(); ok; ok = iter.Next() {
+		if !tr.eq(all[i], iter.Item()) {
+			panic("!")
+		}
+		count++
+		i++
+	}
+	if count != N {
+		t.Fatalf("expected %v, got %v", N, count)
+	}
+	iter.Release()
+	count = 0
+	i = len(all) - 1
+	iter = tr.Iter()
+	for ok := iter.Last(); ok; ok = iter.Prev() {
+		if !tr.eq(all[i], iter.Item()) {
+			panic("!")
+		}
+		i--
+		count++
+	}
+	if count != N {
+		t.Fatalf("expected %v, got %v", N, count)
+	}
+	iter.Release()
+	i = 0
+	iter = tr.Iter()
+	for ok := iter.First(); ok; ok = iter.Next() {
+		if !tr.eq(all[i], iter.Item()) {
+			panic("!")
+		}
+		i++
+	}
+	i--
+	for ok := iter.Prev(); ok; ok = iter.Prev() {
+		i--
+		if !tr.eq(all[i], iter.Item()) {
+			panic("!")
+		}
+
+	}
+	if i != 0 {
+		panic("!")
+	}
+
+	i++
+	for ok := iter.Next(); ok; ok = iter.Next() {
+		if !tr.eq(all[i], iter.Item()) {
+			panic("!")
+		}
+		i++
+
+	}
+	if i != N {
+		panic("!")
+	}
+
+	i = 0
+	for ok := iter.First(); ok; ok = iter.Next() {
+		if !tr.eq(all[i], iter.Item()) {
+			panic("!")
+		}
+		if tr.eq(iter.Item(), testMakeItem(N/2)) {
+			for ok = iter.Prev(); ok; ok = iter.Prev() {
+				i--
+				if !tr.eq(all[i], iter.Item()) {
+					panic("!")
+				}
+			}
+			break
+		}
+		i++
+	}
+	iter.Release()
+
+}

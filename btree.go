@@ -376,12 +376,15 @@ func (tr *BTree[T]) Len() int {
 	return tr.count
 }
 
-// Delete a value for a key
+// Delete a value for a key and returns the deleted value.
+// Returns false if there was no value by that key found.
 func (tr *BTree[T]) Delete(key T) (T, bool) {
 	return tr.DeleteHint(key, nil)
 }
 
-// DeleteHint deletes a value for a key using a path hint
+// DeleteHint deletes a value for a key using a path hint and returns the
+// deleted value.
+// Returns false if there was no value by that key found.
 func (tr *BTree[T]) DeleteHint(key T, hint *PathHint) (T, bool) {
 	if tr.lock() {
 		defer tr.unlock()
@@ -690,7 +693,7 @@ func (tr *BTree[T]) Load(item T) (T, bool) {
 }
 
 // Min returns the minimum item in tree.
-// Returns nil if the tree has no items.
+// Returns nil if the treex has no items.
 func (tr *BTree[T]) Min() (T, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
@@ -977,4 +980,224 @@ func (tr *BTree[T]) rlock() bool {
 
 func (tr *BTree[T]) runlock() {
 	tr.mu.RUnlock()
+}
+
+// Iter represents an iterator
+type Iter[T any] struct {
+	tr      *BTree[T]
+	locked  bool
+	seeked  bool
+	atstart bool
+	atend   bool
+	stack   []iterStackItem[T]
+	item    T
+}
+
+type iterStackItem[T any] struct {
+	n *node[T]
+	i int
+}
+
+// Iter returns a read-only iterator.
+// The Release method must be called finished with iterator.
+func (tr *BTree[T]) Iter() Iter[T] {
+	var iter Iter[T]
+	iter.tr = tr
+	iter.locked = tr.rlock()
+	return iter
+}
+
+// Seek to item greater-or-equal-to key.
+// Returns false if there was no item found.
+func (iter *Iter[T]) Seek(key T) bool {
+	if iter.tr == nil {
+		return false
+	}
+	iter.seeked = true
+	iter.stack = iter.stack[:0]
+	if iter.tr.root == nil {
+		return false
+	}
+	n := iter.tr.root
+	for {
+		i, found := iter.tr.find(n, key, nil, 0)
+		iter.stack = append(iter.stack, iterStackItem[T]{n, i})
+		if found {
+			return true
+		}
+		if n.leaf() {
+			if i == len(n.items) {
+				iter.stack = iter.stack[:0]
+				return false
+			}
+			return true
+		}
+		n = (*n.children)[i]
+	}
+}
+
+// First moves iterator to first item in tree.
+// Returns false if the tree is empty.
+func (iter *Iter[T]) First() bool {
+	if iter.tr == nil {
+		return false
+	}
+	iter.atend = false
+	iter.atstart = false
+	iter.seeked = true
+	iter.stack = iter.stack[:0]
+	if iter.tr.root == nil {
+		return false
+	}
+	n := iter.tr.root
+	for {
+		iter.stack = append(iter.stack, iterStackItem[T]{n, 0})
+		if n.leaf() {
+			break
+		}
+		n = (*n.children)[0]
+	}
+	s := &iter.stack[len(iter.stack)-1]
+	iter.item = s.n.items[s.i]
+	return true
+}
+
+// Last moves iterator to last item in tree.
+// Returns false if the tree is empty.
+func (iter *Iter[T]) Last() bool {
+	if iter.tr == nil {
+		return false
+	}
+	iter.seeked = true
+	iter.stack = iter.stack[:0]
+	if iter.tr.root == nil {
+		return false
+	}
+	n := iter.tr.root
+	for {
+		iter.stack = append(iter.stack, iterStackItem[T]{n, len(n.items)})
+		if n.leaf() {
+			iter.stack[len(iter.stack)-1].i--
+			break
+		}
+		n = (*n.children)[len(n.items)]
+	}
+	s := &iter.stack[len(iter.stack)-1]
+	iter.item = s.n.items[s.i]
+	return true
+}
+
+// First moves iterator to first item in tree.
+// Returns false if the tree is empty.
+func (iter *Iter[T]) Release() {
+	if iter.tr == nil {
+		return
+	}
+	if iter.locked {
+		iter.tr.runlock()
+		iter.locked = false
+	}
+	iter.stack = nil
+	iter.tr = nil
+}
+
+// Next moves iterator to the next item in iterator.
+// Returns false if the tree is empty or the iterator is at the end of
+// the tree.
+func (iter *Iter[T]) Next() bool {
+	if iter.tr == nil {
+		return false
+	}
+	if !iter.seeked {
+		return iter.First()
+	}
+	if len(iter.stack) == 0 {
+		if iter.atstart {
+			return iter.First() && iter.Next()
+		}
+		return false
+	}
+	s := &iter.stack[len(iter.stack)-1]
+	s.i++
+	if s.n.leaf() {
+		if s.i == len(s.n.items) {
+			for {
+				iter.stack = iter.stack[:len(iter.stack)-1]
+				if len(iter.stack) == 0 {
+					iter.atend = true
+					return false
+				}
+				s = &iter.stack[len(iter.stack)-1]
+				if s.i < len(s.n.items) {
+					break
+				}
+			}
+		}
+	} else {
+		n := (*s.n.children)[s.i]
+		for {
+			iter.stack = append(iter.stack, iterStackItem[T]{n, 0})
+			if n.leaf() {
+				break
+			}
+			n = (*n.children)[0]
+		}
+	}
+	s = &iter.stack[len(iter.stack)-1]
+	iter.item = s.n.items[s.i]
+	return true
+}
+
+// Prev moves iterator to the previous item in iterator.
+// Returns false if the tree is empty or the iterator is at the beginning of
+// the tree.
+func (iter *Iter[T]) Prev() bool {
+	if iter.tr == nil {
+		return false
+	}
+	if !iter.seeked {
+		return false
+	}
+	if len(iter.stack) == 0 {
+		if iter.atend {
+			return iter.Last() && iter.Prev()
+		}
+		return false
+	}
+	s := &iter.stack[len(iter.stack)-1]
+	if s.n.leaf() {
+		s.i--
+		if s.i == -1 {
+			for {
+				iter.stack = iter.stack[:len(iter.stack)-1]
+				if len(iter.stack) == 0 {
+					iter.atstart = true
+					return false
+				}
+				s = &iter.stack[len(iter.stack)-1]
+				s.i--
+				if s.i > -1 {
+					break
+				}
+			}
+		}
+	} else {
+		n := (*s.n.children)[s.i]
+		for {
+			iter.stack = append(iter.stack, iterStackItem[T]{n, len(n.items)})
+			if n.leaf() {
+				iter.stack[len(iter.stack)-1].i--
+				break
+			}
+			n = (*n.children)[len(n.items)]
+		}
+	}
+	s = &iter.stack[len(iter.stack)-1]
+	iter.item = s.n.items[s.i]
+	return true
+}
+
+// Item returns the current iterator item.
+func (iter *Iter[T]) Item() T {
+	return iter.item
 }
