@@ -218,3 +218,56 @@ func (tr *BTree) Walk(iter func(items []interface{})) {
 func (tr *BTree) Copy() *BTree {
 	return &BTree{base: tr.base.Copy()}
 }
+
+type Iter struct {
+	base btree.Iter
+}
+
+// Iter returns a read-only iterator.
+// The Release method must be called finished with iterator.
+func (tr *BTree) Iter() Iter {
+	return Iter{tr.base.Iter()}
+}
+
+// Seek to item greater-or-equal-to key.
+// Returns false if there was no item found.
+func (iter *Iter) Seek(key interface{}) bool {
+	return iter.base.Seek(key)
+}
+
+// First moves iterator to first item in tree.
+// Returns false if the tree is empty.
+func (iter *Iter) First() bool {
+	return iter.base.First()
+}
+
+// Last moves iterator to last item in tree.
+// Returns false if the tree is empty.
+func (iter *Iter) Last() bool {
+	return iter.base.Last()
+}
+
+// First moves iterator to first item in tree.
+// Returns false if the tree is empty.
+func (iter *Iter) Release() {
+	iter.base.Release()
+}
+
+// Next moves iterator to the next item in iterator.
+// Returns false if the tree is empty or the iterator is at the end of
+// the tree.
+func (iter *Iter) Next() bool {
+	return iter.base.Next()
+}
+
+// Prev moves iterator to the previous item in iterator.
+// Returns false if the tree is empty or the iterator is at the beginning of
+// the tree.
+func (iter *Iter) Prev() bool {
+	return iter.base.Prev()
+}
+
+// Item returns the current iterator item.
+func (iter *Iter) Item() interface{} {
+	return iter.base.Item()
+}

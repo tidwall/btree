@@ -118,10 +118,10 @@ func main() {
 ### Basic
 
 ```
-Len()                   # return the number of items in the btree
-Set(item)               # insert or replace an existing item
 Get(item)               # get an existing item
+Set(item)               # insert or replace an existing item
 Delete(item)            # delete an item
+Len()                   # return the number of items in the btree
 ```
 
 ### Iteration
@@ -129,6 +129,7 @@ Delete(item)            # delete an item
 ```
 Ascend(pivot, iter)     # scan items in ascending order starting at pivot.
 Descend(pivot, iter)    # scan items in descending order starting at pivot.
+Iter()                  # returns a read-only iterator for for-loops.
 ```
 
 ### Queues
