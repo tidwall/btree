@@ -6,8 +6,11 @@ package btree
 import "constraints"
 
 type mapPair[K constraints.Ordered, V any] struct {
-	key   K
+	// The `value` field should be before the `key` field because doing so
+	// allows for the Go compiler to optimize away the `value` field when
+	// it's a `struct{}`, which is the case for `btree.Set`.
 	value V
+	key   K
 }
 
 type Map[K constraints.Ordered, V any] struct {
@@ -59,7 +62,7 @@ func (tr *Map[K, V]) find(n *mapNode[K, V], key K) (index int, found bool) {
 
 // Set or replace a value for a key
 func (tr *Map[K, V]) Set(key K, value V) (V, bool) {
-	item := mapPair[K, V]{key, value}
+	item := mapPair[K, V]{key: key, value: value}
 	if tr.root == nil {
 		tr.root = tr.newNode(true)
 		tr.root.items = append([]mapPair[K, V]{}, item)
@@ -465,7 +468,7 @@ func (tr *Map[K, V]) descend(n *mapNode[K, V], pivot K, iter func(key K, value V
 
 // Load is for bulk loading pre-sorted items
 func (tr *Map[K, V]) Load(key K, value V) (V, bool) {
-	item := mapPair[K, V]{key, value}
+	item := mapPair[K, V]{key: key, value: value}
 	if tr.root == nil {
 		return tr.Set(item.key, item.value)
 	}

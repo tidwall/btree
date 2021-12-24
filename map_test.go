@@ -6,6 +6,7 @@ import (
 	"sort"
 	"testing"
 	"time"
+	"unsafe"
 )
 
 type testMapKind = int
