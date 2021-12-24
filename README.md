@@ -89,6 +89,59 @@ func main() {
 }
 ```
 
+### Using `btree.Set`
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/tidwall/btree"
+)
+
+func main() {
+	// create a set
+	var names btree.Set[string]
+
+	// add some names
+	names.Insert("Jane")
+	names.Insert("Andrea")
+	names.Insert("Steve")
+	names.Insert("Andy")
+	names.Insert("Janet")
+	names.Insert("Andy")
+
+	// Iterate over the maps and print each user
+	names.Scan(func(key string) bool {
+		fmt.Printf("%s\n", key)
+		return true
+	})
+	fmt.Printf("\n")
+
+	// Delete a couple
+	names.Delete("Steve")
+	names.Delete("Andy")
+
+	// print the map again
+	names.Scan(func(key string) bool {
+		fmt.Printf("%s\n", key)
+		return true
+	})
+	fmt.Printf("\n")
+
+	// Output:
+	// Andrea
+	// Andy
+	// Jane
+	// Janet
+	// Steve
+	//
+	// Andrea
+	// Jane
+	// Janet
+}
+```
+
 ### Using `btree.Generic`
 
 ```go
