@@ -15,7 +15,7 @@ An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) impl
 - [Path hinting](PATH_HINT.md) optimization for operations with nearby keys.
 - `Map` and `Set` types for ordered key-value maps and sets,
 
-### B-tree types
+## B-tree types
 
 This package includes the following types of B-trees:
 
