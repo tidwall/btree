@@ -32,9 +32,64 @@ To start using btree, install Go and run `go get`:
 $ go get -u github.com/tidwall/btree@generics
 ```
 
-## Usage
+## Examples
 
-This example used the `btree.Generic` B-tree type.
+### Using `btree.Map`
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/tidwall/btree"
+)
+
+func main() {
+	// create a map
+	var users btree.Map[string, string]
+
+	// add some users
+	users.Set("user:4", "Andrea")
+	users.Set("user:6", "Andy")
+	users.Set("user:2", "Andy")
+	users.Set("user:1", "Jane")
+	users.Set("user:5", "Janet")
+	users.Set("user:3", "Steve")
+
+	// Iterate over the maps and print each user
+	users.Scan(func(key, value string) bool {
+		fmt.Printf("%s %s\n", key, value)
+		return true
+	})
+	fmt.Printf("\n")
+
+	// Delete a couple
+	users.Delete("user:5")
+	users.Delete("user:1")
+
+	// print the map again
+	users.Scan(func(key, value string) bool {
+		fmt.Printf("%s %s\n", key, value)
+		return true
+	})
+	fmt.Printf("\n")
+
+	// Output:
+	// user:1 Jane
+	// user:2 Andy
+	// user:3 Steve
+	// user:4 Andrea
+	// user:5 Janet
+	// user:6 Andy
+	//
+	// user:2 Andy
+	// user:3 Steve
+	// user:4 Andrea
+	// user:6 Andy
+}
+```
+
+### Using `btree.Generic`
 
 ```go
 package main
