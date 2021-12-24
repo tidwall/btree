@@ -13,6 +13,16 @@ An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) impl
 - Fast bulk loading for pre-ordered data using the `Load()` method.
 - All operations are thread-safe.
 - [Path hinting](PATH_HINT.md) optimization for operations with nearby keys.
+- `Map` and `Set` types for ordered key-value maps and sets,
+
+### B-tree types
+
+This package includes the following types of B-trees:
+
+- `btree.Map`: A simple and fast B-tree for storing ordered key value pairs. Go 1.18+
+- `btree.Set`: Like `Map`, but for storing keys only. Go 1.18+
+- `btree.Generic`: More advanced B-tree for storing data using a custom comparator. Go 1.18+
+- `btree.BTree`: A standard and flexible B-tree for storing with any kind of data. Backwards compatible. Works with older versions of Go. 
 
 ## Installing
 
@@ -23,6 +33,8 @@ $ go get -u github.com/tidwall/btree@generics
 ```
 
 ## Usage
+
+This example used the `btree.Generic` B-tree type.
 
 ```go
 package main
@@ -61,8 +73,8 @@ func main() {
 	// Create a tree for keys and a tree for values.
 	// The "keys" tree will be sorted on the Keys field.
 	// The "values" tree will be sorted on the Values field.
-	keys := btree.New[Item](byKeys)
-	vals := btree.New[Item](byVals)
+	keys := btree.NewGeneric[Item](byKeys)
+	vals := btree.NewGeneric[Item](byVals)
 
 	// Create some items.
 	users := []Item{
