@@ -1,24 +1,9 @@
 package btree
 
 import (
-	"fmt"
-	"math/rand"
-	"os"
-	"strconv"
 	"sync"
 	"testing"
-	"time"
 )
-
-func init() {
-	seed, err := strconv.ParseInt(os.Getenv("SEED"), 10, 64)
-	if err != nil {
-		seed = time.Now().UnixNano()
-	}
-	// seed = 1637859071499249000
-	fmt.Printf("seed: %d\n", seed)
-	rand.Seed(seed)
-}
 
 func assert(x bool) {
 	if !x {
