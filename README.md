@@ -32,10 +32,10 @@ Go 1.18+
 Like `Map`, but only for storing keys.
 Go 1.18+
 - [`btree.Generic`](#btreegeneric):
-An feature-rich B-tree for storing data using a custom comparator.
+A feature-rich B-tree for storing data using a custom comparator.
 Go 1.18+
 - [`btree.BTree`](#btreebtree):
-Like `Generic` but is flexible. Backwards compatible.
+Like `Generic` but uses the `interface{}` type for data. Backwards compatible.
 Go 1.16+
 
 ### btree.Map
