@@ -25,16 +25,16 @@ $ go get github.com/tidwall/btree
 
 This package includes the following types of B-trees:
 
-- [`btree.Map`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreemap):
+- [`btree.Map`](#btreemap):
 A fast B-tree for storing ordered key value pairs.
 Go 1.18+ 
-- [`btree.Set`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreeset):
+- [`btree.Set`](#btreeset):
 Like `Map`, but only for storing keys.
 Go 1.18+
-- [`btree.Generic`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreegeneric):
+- [`btree.Generic`](#btreegeneric):
 An feature-rich B-tree for storing data using a custom comparator.
 Go 1.18+
-- [`btree.BTree`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreebtree):
+- [`btree.BTree`](#btreebtree):
 Like `Generic` but is flexible. Backwards compatible.
 Go 1.16+
 
