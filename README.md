@@ -2,37 +2,67 @@
 
 [![GoDoc](https://godoc.org/github.com/tidwall/btree?status.svg)](https://godoc.org/github.com/tidwall/btree)
 
-An [efficient](#performance) [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go.
+An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go.
 
 ## Features
 
-- Support for Generics (Go 1.18).
-- `Copy()` method with copy-on-write support.
-- Fast bulk loading for pre-ordered data using the `Load()` method.
-- All operations are thread-safe.
-- [Path hinting](PATH_HINT.md) optimization for operations with nearby keys.
+- Support for [Generics](#generics) (Go 1.18).
 - `Map` and `Set` types for ordered key-value maps and sets,
-
-## B-tree types
-
-This package includes the following types of B-trees:
-
-- `btree.Map`: A simple and fast B-tree for storing ordered key value pairs. Go 1.18+ ([example](https://github.com/tidwall/btree/blob/generics/README.md#using-btreemap))
-- `btree.Set`: Like `Map`, but for storing keys only. Go 1.18+ ([example](https://github.com/tidwall/btree/blob/generics/README.md#using-btreeset))
-- `btree.Generic`: More advanced B-tree for storing data using a custom comparator. Go 1.18+ ([example](https://github.com/tidwall/btree/blob/generics/README.md#using-btreegeneric))
-- `btree.BTree`: A standard and flexible B-tree for storing with any kind of data. Backwards compatible. Go 1.16+. ([example](https://github.com/tidwall/btree/blob/generics/README.md#using-btreebtree))
+- Fast bulk loading for pre-ordered data using the `Load()` method.
+- `Copy()` method with copy-on-write support.
+- Thread-safe operations.
+- [Path hinting](PATH_HINT.md) optimization for operations with nearby keys.
 
 ## Installing
 
 To start using btree, install Go and run `go get`:
 
 ```sh
-$ go get -u github.com/tidwall/btree
+$ go get github.com/tidwall/btree
 ```
 
-## Examples
+## B-tree types
 
-### Using `btree.Map`
+This package includes the following types of B-trees:
+
+- [`btree.Map`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreemap):
+A fast B-tree for storing ordered key value pairs.
+Go 1.18+ 
+- [`btree.Set`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreeset):
+Like `Map`, but only for storing keys.
+Go 1.18+
+- [`btree.Generic`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreegeneric):
+An feature-rich B-tree for storing data using a custom comparator.
+Go 1.18+
+- [`btree.BTree`](https://github.com/tidwall/btree/blob/generics/README.md#using-btreebtree):
+Like `Generic` but is flexible. Backwards compatible.
+Go 1.16+
+
+### btree.Map
+
+```go
+// Basic
+Set(key, value)         // insert or replace an item
+Get(key, value)         // get an existing item
+Delete(key)             // delete an item
+Len()                   // return the number of items in the map
+
+// Iteration
+Scan(iter)              // scan items in ascending order
+Reverse(iter)           // scan items in descending order
+Ascend(key, iter)       // scan items in ascending order that are >= to key
+Descend(key, iter)      // scan items in descending order that are <= to key.
+Iter()                  // returns a read-only iterator for for-loops.
+
+// Array-like operations
+GetAt(index)            // returns the item at index
+DeleteAt(index)         // deletes the item at index
+
+// Bulk-loading
+Load(key, value)        // load presorted items into tree
+```
+
+#### Example
 
 ```go
 package main
@@ -87,7 +117,31 @@ func main() {
 }
 ```
 
-### Using `btree.Set`
+### btree.Set
+
+```go
+// Basic
+Insert(key)             // insert an item
+Contains(key)           // test if item exists
+Delete(key)             // delete an item
+Len()                   // return the number of items in the set
+
+// Iteration
+Scan(iter)              // scan items in ascending order
+Reverse(iter)           // scan items in descending order
+Ascend(key, iter)       // scan items in ascending order that are >= to key
+Descend(key, iter)      // scan items in descending order that are <= to key.
+Iter()                  // returns a read-only iterator for for-loops.
+
+// Array-like operations
+GetAt(index)            // returns the item at index
+DeleteAt(index)         // deletes the item at index
+
+// Bulk-loading
+Load(key)               // load presorted item into tree
+```
+
+#### Example
 
 ```go
 package main
@@ -140,7 +194,39 @@ func main() {
 }
 ```
 
-### Using `btree.Generic`
+### btree.Generic
+
+```go
+// Basic
+Set(item)               // insert or replace an item
+Get(item)               // get an existing item
+Delete(item)            // delete an item
+Len()                   // return the number of items in the btree
+
+// Iteration
+Scan(iter)              // scan items in ascending order
+Reverse(iter)           // scan items in descending order
+Ascend(key, iter)       // scan items in ascending order that are >= to key
+Descend(key, iter)      // scan items in descending order that are <= to key.
+Iter()                  // returns a read-only iterator for for-loops.
+
+// Array-like operations
+GetAt(index)            // returns the item at index
+DeleteAt(index)         // deletes the item at index
+
+// Bulk-loading
+Load(item)        // load presorted items into tree
+
+// Path hinting
+SetHint(item, *hint)    # insert or replace an existing item
+GetHint(item, *hint)    # get an existing item
+DeleteHint(item, *hint) # delete an item
+
+// Copy-on-write
+Copy()                  # Copy the btree
+```
+
+#### Example
 
 ```go
 package main
@@ -228,7 +314,39 @@ func main() {
 }
 ```
 
-### Using `btree.BTree` (non-generic)
+### btree.BTree
+
+```go
+// Basic
+Set(item)               // insert or replace an item
+Get(item)               // get an existing item
+Delete(item)            // delete an item
+Len()                   // return the number of items in the btree
+
+// Iteration
+Scan(iter)              // scan items in ascending order
+Reverse(iter)           // scan items in descending order
+Ascend(key, iter)       // scan items in ascending order that are >= to key
+Descend(key, iter)      // scan items in descending order that are <= to key.
+Iter()                  // returns a read-only iterator for for-loops.
+
+// Array-like operations
+GetAt(index)            // returns the item at index
+DeleteAt(index)         // deletes the item at index
+
+// Bulk-loading
+Load(item)        // load presorted items into tree
+
+// Path hinting
+SetHint(item, *hint)    # insert or replace an existing item
+GetHint(item, *hint)    # get an existing item
+DeleteHint(item, *hint) # delete an item
+
+// Copy-on-write
+Copy()                  # Copy the btree
+```
+
+#### Example
 
 ```go
 package main
@@ -318,56 +436,6 @@ func main() {
 	// user:5 Janet
 	// user:3 Steve
 }
-```
-
-## Operations
-
-### Basic
-
-```
-Get(item)               # get an existing item
-Set(item)               # insert or replace an existing item
-Delete(item)            # delete an item
-Len()                   # return the number of items in the btree
-```
-
-### Iteration
-
-```
-Scan(iter)              # scan items in ascending order
-Reverse(iter)           # scan items in descending order
-Ascend(pivot, iter)     # scan items in ascending order starting at pivot.
-Descend(pivot, iter)    # scan items in descending order starting at pivot.
-Iter()                  # returns a read-only iterator for for-loops.
-```
-
-### Queues
-
-```
-Min()                   # return the first item in the btree
-Max()                   # return the last item in the btree
-PopMin()                # remove and return the first item in the btree
-PopMax()                # remove and return the last item in the btree
-```
-### Bulk loading
-
-```
-Load(item)              # load presorted items into tree
-```
-
-### Path hints
-
-```
-SetHint(item, *hint)    # insert or replace an existing item
-GetHint(item, *hint)    # get an existing item
-DeleteHint(item, *hint) # delete an item
-```
-
-### Array-like operations
-
-```
-GetAt(index)     # returns the value at index
-DeleteAt(index)  # deletes the item at index
 ```
 
 ## Performance
