@@ -42,24 +42,24 @@ Go 1.16+
 
 ```go
 // Basic
-Set(key, value)         // insert or replace an item
-Get(key, value)         // get an existing item
-Delete(key)             // delete an item
-Len()                   // return the number of items in the map
+Set(key, value)    // insert or replace an item
+Get(key, value)    // get an existing item
+Delete(key)        // delete an item
+Len()              // return the number of items in the map
 
 // Iteration
-Scan(iter)              // scan items in ascending order
-Reverse(iter)           // scan items in descending order
-Ascend(key, iter)       // scan items in ascending order that are >= to key
-Descend(key, iter)      // scan items in descending order that are <= to key.
-Iter()                  // returns a read-only iterator for for-loops.
+Scan(iter)         // scan items in ascending order
+Reverse(iter)      // scan items in descending order
+Ascend(key, iter)  // scan items in ascending order that are >= to key
+Descend(key, iter) // scan items in descending order that are <= to key.
+Iter()             // returns a read-only iterator for for-loops.
 
 // Array-like operations
-GetAt(index)            // returns the item at index
-DeleteAt(index)         // deletes the item at index
+GetAt(index)       // returns the item at index
+DeleteAt(index)    // deletes the item at index
 
 // Bulk-loading
-Load(key, value)        // load presorted items into tree
+Load(key, value)   // load presorted items into tree
 ```
 
 #### Example
@@ -121,24 +121,24 @@ func main() {
 
 ```go
 // Basic
-Insert(key)             // insert an item
-Contains(key)           // test if item exists
-Delete(key)             // delete an item
-Len()                   // return the number of items in the set
+Insert(key)        // insert an item
+Contains(key)      // test if item exists
+Delete(key)        // delete an item
+Len()              // return the number of items in the set
 
 // Iteration
-Scan(iter)              // scan items in ascending order
-Reverse(iter)           // scan items in descending order
-Ascend(key, iter)       // scan items in ascending order that are >= to key
-Descend(key, iter)      // scan items in descending order that are <= to key.
-Iter()                  // returns a read-only iterator for for-loops.
+Scan(iter)         // scan items in ascending order
+Reverse(iter)      // scan items in descending order
+Ascend(key, iter)  // scan items in ascending order that are >= to key
+Descend(key, iter) // scan items in descending order that are <= to key.
+Iter()             // returns a read-only iterator for for-loops.
 
 // Array-like operations
-GetAt(index)            // returns the item at index
-DeleteAt(index)         // deletes the item at index
+GetAt(index)       // returns the item at index
+DeleteAt(index)    // deletes the item at index
 
 // Bulk-loading
-Load(key)               // load presorted item into tree
+Load(key)          // load presorted item into tree
 ```
 
 #### Example
@@ -215,15 +215,15 @@ GetAt(index)            // returns the item at index
 DeleteAt(index)         // deletes the item at index
 
 // Bulk-loading
-Load(item)        // load presorted items into tree
+Load(item)              // load presorted items into tree
 
 // Path hinting
-SetHint(item, *hint)    # insert or replace an existing item
-GetHint(item, *hint)    # get an existing item
-DeleteHint(item, *hint) # delete an item
+SetHint(item, *hint)    // insert or replace an existing item
+GetHint(item, *hint)    // get an existing item
+DeleteHint(item, *hint) // delete an item
 
 // Copy-on-write
-Copy()                  # Copy the btree
+Copy()                  // copy the btree
 ```
 
 #### Example
@@ -335,15 +335,15 @@ GetAt(index)            // returns the item at index
 DeleteAt(index)         // deletes the item at index
 
 // Bulk-loading
-Load(item)        // load presorted items into tree
+Load(item)              // load presorted items into tree
 
 // Path hinting
-SetHint(item, *hint)    # insert or replace an existing item
-GetHint(item, *hint)    # get an existing item
-DeleteHint(item, *hint) # delete an item
+SetHint(item, *hint)    // insert or replace an existing item
+GetHint(item, *hint)    // get an existing item
+DeleteHint(item, *hint) // delete an item
 
 // Copy-on-write
-Copy()                  # Copy the btree
+Copy()                  // copy the btree
 ```
 
 #### Example
