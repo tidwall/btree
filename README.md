@@ -27,7 +27,7 @@ This package includes the following types of B-trees:
 To start using btree, install Go and run `go get`:
 
 ```sh
-$ go get -u github.com/tidwall/btree@generics
+$ go get -u github.com/tidwall/btree
 ```
 
 ## Examples
