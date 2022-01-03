@@ -13,12 +13,18 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go
 - Thread-safe operations.
 - [Path hinting](PATH_HINT.md) optimization for operations with nearby keys.
 
-## Installing
+## Using
 
-To start using btree, install Go and run `go get`:
+To start using this package, install Go and run:
 
 ```sh
 $ go get github.com/tidwall/btree
+```
+
+To use the generics version of this library, install [Go 1.18 beta](https://go.dev/dl/#go1.18beta1) and run:
+
+```sh
+$ go get github.com/tidwall/btree@generics
 ```
 
 ## B-tree types
