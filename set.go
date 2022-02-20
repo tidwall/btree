@@ -1,8 +1,6 @@
 package btree
 
-import "golang.org/x/exp/constraints"
-
-type Set[K constraints.Ordered] struct {
+type Set[K ordered] struct {
 	base Map[K, struct{}]
 }
 
@@ -113,7 +111,7 @@ func (tr *Set[K]) Height() int {
 }
 
 // SetIter represents an iterator for btree.Set
-type SetIter[K constraints.Ordered] struct {
+type SetIter[K ordered] struct {
 	base MapIter[K, struct{}]
 }
 

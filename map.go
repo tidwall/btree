@@ -3,9 +3,13 @@
 // license that can be found in the LICENSE file.
 package btree
 
-import "golang.org/x/exp/constraints"
+type ordered interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64 | ~string
+}
 
-type mapPair[K constraints.Ordered, V any] struct {
+type mapPair[K ordered, V any] struct {
 	// The `value` field should be before the `key` field because doing so
 	// allows for the Go compiler to optimize away the `value` field when
 	// it's a `struct{}`, which is the case for `btree.Set`.
@@ -13,13 +17,13 @@ type mapPair[K constraints.Ordered, V any] struct {
 	key   K
 }
 
-type Map[K constraints.Ordered, V any] struct {
+type Map[K ordered, V any] struct {
 	root  *mapNode[K, V]
 	count int
 	empty mapPair[K, V]
 }
 
-type mapNode[K constraints.Ordered, V any] struct {
+type mapNode[K ordered, V any] struct {
 	count    int
 	items    []mapPair[K, V]
 	children *[]*mapNode[K, V]
@@ -714,7 +718,7 @@ func (tr *Map[K, V]) Height() int {
 }
 
 // MapIter represents an iterator for btree.Map
-type MapIter[K constraints.Ordered, V any] struct {
+type MapIter[K ordered, V any] struct {
 	tr      *Map[K, V]
 	seeked  bool
 	atstart bool
@@ -723,7 +727,7 @@ type MapIter[K constraints.Ordered, V any] struct {
 	item    mapPair[K, V]
 }
 
-type mapIterStackItem[K constraints.Ordered, V any] struct {
+type mapIterStackItem[K ordered, V any] struct {
 	n *mapNode[K, V]
 	i int
 }
