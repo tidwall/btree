@@ -3,7 +3,7 @@
 // license that can be found in the LICENSE file.
 package btree
 
-import "constraints"
+import "golang.org/x/exp/constraints"
 
 type mapPair[K constraints.Ordered, V any] struct {
 	// The `value` field should be before the `key` field because doing so

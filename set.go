@@ -1,6 +1,6 @@
 package btree
 
-import "constraints"
+import "golang.org/x/exp/constraints"
 
 type Set[K constraints.Ordered] struct {
 	base Map[K, struct{}]

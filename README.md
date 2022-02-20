@@ -21,7 +21,7 @@ To start using this package, install Go and run:
 $ go get github.com/tidwall/btree
 ```
 
-To use the generics version of this library, install [Go 1.18 beta](https://go.dev/dl/#go1.18beta1) and run:
+To use the generics version of this library, install the [Go 1.18 beta](https://go.dev/dl/#go1.18rc1) and run:
 
 ```sh
 $ go get github.com/tidwall/btree@generics
