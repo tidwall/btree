@@ -1023,6 +1023,7 @@ func (iter *GenericIter[T]) Seek(key T) bool {
 		i, found := iter.tr.find(n, key, nil, 0)
 		iter.stack = append(iter.stack, genericIterStackItem[T]{n, i})
 		if found {
+			iter.item = n.items[i]
 			return true
 		}
 		if n.leaf() {

@@ -52,7 +52,7 @@ func testMakeItem(x int) (item testKind) {
 
 // testNewBTree must return an operational btree for testing.
 func testNewBTree() *Generic[testKind] {
-	return NewGeneric[testKind](testLess)
+	return NewGeneric(testLess)
 }
 
 func randKeys(N int) (keys []testKind) {
@@ -70,7 +70,7 @@ func (tr *Generic[T]) gt(a, b T) bool  { return tr.lt(b, a) }
 func (tr *Generic[T]) gte(a, b T) bool { return tr.gt(a, b) || tr.eq(a, b) }
 
 func kindsAreEqual(a, b []testKind) bool {
-	tr := NewGeneric[testKind](testLess)
+	tr := NewGeneric(testLess)
 	if len(a) != len(b) {
 		return false
 	}
@@ -1284,4 +1284,39 @@ func TestGenericIter(t *testing.T) {
 	}
 	iter.Release()
 
+}
+
+func TestGenericIterSeek(t *testing.T) {
+	tr := NewGeneric(func(a, b int) bool {
+		return a < b
+	})
+	var all []int
+	for i := 0; i < 10000; i++ {
+		tr.Set(i)
+		all = append(all, i)
+	}
+	{
+		start := 500
+		iter := tr.Iter()
+		var vals []int
+		for ok := iter.Seek(start); ok; ok = iter.Next() {
+			vals = append(vals, iter.Item())
+		}
+		iter.Release()
+		assert(vals[0] == start)
+		assert(vals[len(vals)-1] == all[len(all)-1])
+		assert(len(vals) == len(all)-start)
+	}
+	{
+		start := 500
+		iter := tr.Iter()
+		var vals []int
+		for ok := iter.Seek(start); ok; ok = iter.Prev() {
+			vals = append(vals, iter.Item())
+		}
+		iter.Release()
+		assert(vals[0] == start)
+		assert(vals[len(vals)-1] == 0)
+		assert(len(vals) == start+1)
+	}
 }
