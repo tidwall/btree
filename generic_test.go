@@ -1292,31 +1292,25 @@ func TestGenericIterSeek(t *testing.T) {
 	})
 	var all []int
 	for i := 0; i < 10000; i++ {
-		tr.Set(i)
+		tr.Set(i * 2)
 		all = append(all, i)
 	}
 	{
-		start := 500
 		iter := tr.Iter()
 		var vals []int
-		for ok := iter.Seek(start); ok; ok = iter.Next() {
+		for ok := iter.Seek(501); ok; ok = iter.Next() {
 			vals = append(vals, iter.Item())
 		}
 		iter.Release()
-		assert(vals[0] == start)
-		assert(vals[len(vals)-1] == all[len(all)-1])
-		assert(len(vals) == len(all)-start)
+		assert(vals[0] == 502 && vals[1] == 504)
 	}
 	{
-		start := 500
 		iter := tr.Iter()
 		var vals []int
-		for ok := iter.Seek(start); ok; ok = iter.Prev() {
+		for ok := iter.Seek(501); ok; ok = iter.Prev() {
 			vals = append(vals, iter.Item())
 		}
 		iter.Release()
-		assert(vals[0] == start)
-		assert(vals[len(vals)-1] == 0)
-		assert(len(vals) == start+1)
+		assert(vals[0] == 502 && vals[1] == 500)
 	}
 }

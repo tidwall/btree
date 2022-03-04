@@ -1031,6 +1031,7 @@ func (iter *GenericIter[T]) Seek(key T) bool {
 				iter.stack = iter.stack[:0]
 				return false
 			}
+			iter.item = n.items[i]
 			return true
 		}
 		n = (*n.children)[i]
