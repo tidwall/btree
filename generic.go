@@ -1203,3 +1203,23 @@ func (iter *GenericIter[T]) Prev() bool {
 func (iter *GenericIter[T]) Item() T {
 	return iter.item
 }
+
+// Items returns all the items in order.
+func (tr *Generic[T]) Items() []T {
+	items := make([]T, 0, tr.Len())
+	if tr.root != nil {
+		items = tr.root.aitems(items)
+	}
+	return items
+}
+
+func (n *node[T]) aitems(items []T) []T {
+	if n.leaf() {
+		return append(items, n.items...)
+	}
+	for i := 0; i < len(n.items); i++ {
+		items = (*n.children)[i].aitems(items)
+		items = append(items, n.items[i])
+	}
+	return (*n.children)[len(*n.children)-1].aitems(items)
+}
