@@ -924,3 +924,75 @@ func (iter *MapIter[K, V]) Key() K {
 func (iter *MapIter[K, V]) Value() V {
 	return iter.item.value
 }
+
+// Values returns all the values in order.
+func (tr *Map[K, V]) Values() []V {
+	values := make([]V, 0, tr.Len())
+	if tr.root != nil {
+		values = tr.root.values(values)
+	}
+	return values
+}
+
+func (n *mapNode[K, V]) values(values []V) []V {
+	if n.leaf() {
+		for i := 0; i < len(n.items); i++ {
+			values = append(values, n.items[i].value)
+		}
+		return values
+	}
+	for i := 0; i < len(n.items); i++ {
+		values = (*n.children)[i].values(values)
+		values = append(values, n.items[i].value)
+	}
+	return (*n.children)[len(*n.children)-1].values(values)
+}
+
+// Keys returns all the keys in order.
+func (tr *Map[K, V]) Keys() []K {
+	keys := make([]K, 0, tr.Len())
+	if tr.root != nil {
+		keys = tr.root.keys(keys)
+	}
+	return keys
+}
+
+func (n *mapNode[K, V]) keys(keys []K) []K {
+	if n.leaf() {
+		for i := 0; i < len(n.items); i++ {
+			keys = append(keys, n.items[i].key)
+		}
+		return keys
+	}
+	for i := 0; i < len(n.items); i++ {
+		keys = (*n.children)[i].keys(keys)
+		keys = append(keys, n.items[i].key)
+	}
+	return (*n.children)[len(*n.children)-1].keys(keys)
+}
+
+// KeyValues returns all the keys and values in order.
+func (tr *Map[K, V]) KeyValues() ([]K, []V) {
+	keys := make([]K, 0, tr.Len())
+	values := make([]V, 0, tr.Len())
+	if tr.root != nil {
+		keys, values = tr.root.keyValues(keys, values)
+	}
+	return keys, values
+}
+
+func (n *mapNode[K, V]) keyValues(keys []K, values []V) ([]K, []V) {
+	if n.leaf() {
+		for i := 0; i < len(n.items); i++ {
+			keys = append(keys, n.items[i].key)
+			values = append(values, n.items[i].value)
+		}
+		return keys, values
+	}
+	for i := 0; i < len(n.items); i++ {
+		keys, values = (*n.children)[i].keyValues(keys, values)
+		keys = append(keys, n.items[i].key)
+		values = append(values, n.items[i].value)
+	}
+	return (*n.children)[len(*n.children)-1].keyValues(keys, values)
+}

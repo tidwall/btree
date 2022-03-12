@@ -165,6 +165,46 @@ func TestMapAscend(t *testing.T) {
 	}
 }
 
+func TestMapKeyValues(t *testing.T) {
+	tr := testMapNewBTree()
+	if len(tr.Keys()) != 0 {
+		t.Fatalf("expected 0, got %v", len(tr.Keys()))
+	}
+	if len(tr.Values()) != 0 {
+		t.Fatalf("expected 0, got %v", len(tr.Values()))
+	}
+	keys, values := tr.KeyValues()
+	if len(keys) != 0 {
+		t.Fatalf("expected 0, got %v", len(keys))
+	}
+	if len(values) != 0 {
+		t.Fatalf("expected 0, got %v", len(values))
+	}
+	keys = nil
+	values = nil
+	for i := 0; i < 100000; i += 10 {
+		keys = append(keys, testMapMakeItem(i))
+		values = append(values, testMapMakeItem(i)*10)
+		tr.Set(keys[len(keys)-1], values[len(values)-1])
+		tr.sane()
+	}
+	keys2 := tr.Keys()
+	values2 := tr.Values()
+	if !kindsAreEqual(keys, keys2) {
+		t.Fatalf("not equal")
+	}
+	if !kindsAreEqual(values, values2) {
+		t.Fatalf("not equal")
+	}
+	keys2, values2 = tr.KeyValues()
+	if !kindsAreEqual(keys, keys2) {
+		t.Fatalf("not equal")
+	}
+	if !kindsAreEqual(values, values2) {
+		t.Fatalf("not equal")
+	}
+}
+
 func TestMapSimpleRandom(t *testing.T) {
 	start := time.Now()
 	for time.Since(start) < time.Second*2 {
