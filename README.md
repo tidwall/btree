@@ -6,7 +6,7 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go
 
 ## Features
 
-- Support for [Generics](#generics) (Go 1.18).
+- Support for [Generics](#generics) (Go 1.18+).
 - `Map` and `Set` types for ordered key-value maps and sets,
 - Fast bulk loading for pre-ordered data using the `Load()` method.
 - `Copy()` method with copy-on-write support.
@@ -19,12 +19,6 @@ To start using this package, install Go and run:
 
 ```sh
 $ go get github.com/tidwall/btree
-```
-
-To use the generics version of this library, install the [Go 1.18 beta](https://go.dev/dl/#go1.18rc1) and run:
-
-```sh
-$ go get github.com/tidwall/btree@generics
 ```
 
 ## B-tree types
