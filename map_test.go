@@ -1166,3 +1166,29 @@ func TestMapIter(t *testing.T) {
 	}
 
 }
+
+func TestMapIterSeek(t *testing.T) {
+	var tr Map[int, struct{}]
+
+	var all []int
+	for i := 0; i < 10000; i++ {
+		tr.Set(i*2, struct{}{})
+		all = append(all, i)
+	}
+	{
+		iter := tr.Iter()
+		var vals []int
+		for ok := iter.Seek(501); ok; ok = iter.Next() {
+			vals = append(vals, iter.Key())
+		}
+		assert(vals[0] == 502 && vals[1] == 504)
+	}
+	{
+		iter := tr.Iter()
+		var vals []int
+		for ok := iter.Seek(501); ok; ok = iter.Prev() {
+			vals = append(vals, iter.Key())
+		}
+		assert(vals[0] == 502 && vals[1] == 500)
+	}
+}

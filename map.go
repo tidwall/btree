@@ -755,6 +755,7 @@ func (iter *MapIter[K, V]) Seek(key K) bool {
 		i, found := iter.tr.find(n, key)
 		iter.stack = append(iter.stack, mapIterStackItem[K, V]{n, i})
 		if found {
+			iter.item = n.items[i]
 			return true
 		}
 		if n.leaf() {
@@ -762,6 +763,7 @@ func (iter *MapIter[K, V]) Seek(key K) bool {
 				iter.stack = iter.stack[:0]
 				return false
 			}
+			iter.item = n.items[i]
 			return true
 		}
 		n = (*n.children)[i]

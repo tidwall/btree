@@ -1089,8 +1089,7 @@ func (iter *GenericIter[T]) Last() bool {
 	return true
 }
 
-// First moves iterator to first item in tree.
-// Returns false if the tree is empty.
+// Release the iterator.
 func (iter *GenericIter[T]) Release() {
 	if iter.tr == nil {
 		return
