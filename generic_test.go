@@ -1331,3 +1331,19 @@ func TestGenericIterSeek(t *testing.T) {
 		assert(vals[0] == 502 && vals[1] == 500)
 	}
 }
+
+func TestGenericIterSeekPrefix(t *testing.T) {
+	tr := NewGeneric(func(a, b int) bool {
+		return a < b
+	})
+	count := 10_000
+	for i := 0; i < count; i++ {
+		tr.Set(i * 2)
+	}
+	for i := 0; i < count; i++ {
+		iter := tr.Iter()
+		ret := iter.Seek(i*2 - 1)
+		assert(ret == true)
+		iter.Release()
+	}
+}
