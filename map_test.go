@@ -1192,3 +1192,16 @@ func TestMapIterSeek(t *testing.T) {
 		assert(vals[0] == 502 && vals[1] == 500)
 	}
 }
+
+func TestMapIterSeekPrefix(t *testing.T) {
+	var tr Map[int, struct{}]
+	count := 10_000
+	for i := 0; i < count; i++ {
+		tr.Set(i*2, struct{}{})
+	}
+	for i := 0; i < count; i++ {
+		iter := tr.Iter()
+		ret := iter.Seek(i*2 - 1)
+		assert(ret == true)
+	}
+}

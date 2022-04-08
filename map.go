@@ -759,12 +759,8 @@ func (iter *MapIter[K, V]) Seek(key K) bool {
 			return true
 		}
 		if n.leaf() {
-			if i == len(n.items) {
-				iter.stack = iter.stack[:0]
-				return false
-			}
-			iter.item = n.items[i]
-			return true
+			iter.stack[len(iter.stack)-1].i--
+			return iter.Next()
 		}
 		n = (*n.children)[i]
 	}
