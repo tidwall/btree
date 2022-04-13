@@ -18,15 +18,50 @@ type mapPair[K ordered, V any] struct {
 }
 
 type Map[K ordered, V any] struct {
+	cow   *cow
 	root  *mapNode[K, V]
 	count int
 	empty mapPair[K, V]
 }
 
 type mapNode[K ordered, V any] struct {
+	cow      *cow
 	count    int
 	items    []mapPair[K, V]
 	children *[]*mapNode[K, V]
+}
+
+// This operation should not be inlined because it's expensive and rarely
+// called outside of heavy copy-on-write situations. Marking it "noinline"
+// allows for the parent cowLoad to be inlined.
+// go:noinline
+func (tr *Map[K, V]) copy(n *mapNode[K, V]) *mapNode[K, V] {
+	n2 := new(mapNode[K, V])
+	n2.cow = tr.cow
+	n2.count = n.count
+	n2.items = make([]mapPair[K, V], len(n.items), cap(n.items))
+	copy(n2.items, n.items)
+	if !n.leaf() {
+		n2.children = new([]*mapNode[K, V])
+		*n2.children = make([]*mapNode[K, V], len(*n.children), maxItems+1)
+		copy(*n2.children, *n.children)
+	}
+	return n2
+}
+
+// cowLoad loads the provided node and, if needed, performs a copy-on-write.
+func (tr *Map[K, V]) cowLoad(cn **mapNode[K, V]) *mapNode[K, V] {
+	if (*cn).cow != tr.cow {
+		*cn = tr.copy(*cn)
+	}
+	return *cn
+}
+
+func (tr *Map[K, V]) Copy() *Map[K, V] {
+	tr2 := new(Map[K, V])
+	*tr2 = *tr
+	tr2.cow = new(cow)
+	return tr2
 }
 
 func (tr *Map[K, V]) less(a, b K) bool {
@@ -35,6 +70,7 @@ func (tr *Map[K, V]) less(a, b K) bool {
 
 func (tr *Map[K, V]) newNode(leaf bool) *mapNode[K, V] {
 	n := new(mapNode[K, V])
+	n.cow = tr.cow
 	if !leaf {
 		n.children = new([]*mapNode[K, V])
 	}
@@ -74,7 +110,7 @@ func (tr *Map[K, V]) Set(key K, value V) (V, bool) {
 		tr.count = 1
 		return tr.empty.value, false
 	}
-	prev, replaced, split := tr.nodeSet(tr.root, item)
+	prev, replaced, split := tr.nodeSet(&tr.root, item)
 	if split {
 		left := tr.root
 		right, median := tr.nodeSplit(left)
@@ -92,7 +128,8 @@ func (tr *Map[K, V]) Set(key K, value V) (V, bool) {
 	return tr.empty.value, false
 }
 
-func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V]) (right *mapNode[K, V], median mapPair[K, V]) {
+func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V],
+) (right *mapNode[K, V], median mapPair[K, V]) {
 	i := maxItems / 2
 	median = n.items[i]
 
@@ -101,7 +138,8 @@ func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V]) (right *mapNode[K, V], median m
 	left.items = make([]mapPair[K, V], len(n.items[:i]), maxItems/2)
 	copy(left.items, n.items[:i])
 	if !n.leaf() {
-		*left.children = make([]*mapNode[K, V], len((*n.children)[:i+1]), maxItems+1)
+		*left.children = make([]*mapNode[K, V],
+			len((*n.children)[:i+1]), maxItems+1)
 		copy(*left.children, (*n.children)[:i+1])
 	}
 	left.updateCount()
@@ -111,7 +149,8 @@ func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V]) (right *mapNode[K, V], median m
 	right.items = make([]mapPair[K, V], len(n.items[i+1:]), maxItems/2)
 	copy(right.items, n.items[i+1:])
 	if !n.leaf() {
-		*right.children = make([]*mapNode[K, V], len((*n.children)[i+1:]), maxItems+1)
+		*right.children = make([]*mapNode[K, V],
+			len((*n.children)[i+1:]), maxItems+1)
 		copy(*right.children, (*n.children)[i+1:])
 	}
 	right.updateCount()
@@ -129,8 +168,9 @@ func (n *mapNode[K, V]) updateCount() {
 	}
 }
 
-func (tr *Map[K, V]) nodeSet(n *mapNode[K, V], item mapPair[K, V],
+func (tr *Map[K, V]) nodeSet(pn **mapNode[K, V], item mapPair[K, V],
 ) (prev V, replaced bool, split bool) {
+	n := tr.cowLoad(pn)
 	i, found := tr.find(n, item.key)
 	if found {
 		prev = n.items[i].value
@@ -147,7 +187,7 @@ func (tr *Map[K, V]) nodeSet(n *mapNode[K, V], item mapPair[K, V],
 		n.count++
 		return tr.empty.value, false, false
 	}
-	prev, replaced, split = tr.nodeSet((*n.children)[i], item)
+	prev, replaced, split = tr.nodeSet(&(*n.children)[i], item)
 	if split {
 		if len(n.items) == maxItems {
 			return tr.empty.value, false, true
@@ -159,7 +199,7 @@ func (tr *Map[K, V]) nodeSet(n *mapNode[K, V], item mapPair[K, V],
 		n.items = append(n.items, tr.empty)
 		copy(n.items[i+1:], n.items[i:])
 		n.items[i] = median
-		return tr.nodeSet(n, item)
+		return tr.nodeSet(&n, item)
 	}
 	if !replaced {
 		n.count++
@@ -224,7 +264,7 @@ func (tr *Map[K, V]) Delete(key K) (V, bool) {
 	if tr.root == nil {
 		return tr.empty.value, false
 	}
-	prev, deleted := tr.delete(tr.root, false, key)
+	prev, deleted := tr.delete(&tr.root, false, key)
 	if !deleted {
 		return tr.empty.value, false
 	}
@@ -238,7 +278,9 @@ func (tr *Map[K, V]) Delete(key K) (V, bool) {
 	return prev.value, true
 }
 
-func (tr *Map[K, V]) delete(n *mapNode[K, V], max bool, key K) (mapPair[K, V], bool) {
+func (tr *Map[K, V]) delete(pn **mapNode[K, V], max bool, key K,
+) (mapPair[K, V], bool) {
+	n := tr.cowLoad(pn)
 	var i int
 	var found bool
 	if max {
@@ -264,15 +306,15 @@ func (tr *Map[K, V]) delete(n *mapNode[K, V], max bool, key K) (mapPair[K, V], b
 	if found {
 		if max {
 			i++
-			prev, deleted = tr.delete((*n.children)[i], true, tr.empty.key)
+			prev, deleted = tr.delete(&(*n.children)[i], true, tr.empty.key)
 		} else {
 			prev = n.items[i]
-			maxItem, _ := tr.delete((*n.children)[i], true, tr.empty.key)
+			maxItem, _ := tr.delete(&(*n.children)[i], true, tr.empty.key)
 			deleted = true
 			n.items[i] = maxItem
 		}
 	} else {
-		prev, deleted = tr.delete((*n.children)[i], max, key)
+		prev, deleted = tr.delete(&(*n.children)[i], max, key)
 	}
 	if !deleted {
 		return tr.empty, false
@@ -294,8 +336,8 @@ func (tr *Map[K, V]) nodeRebalance(n *mapNode[K, V], i int) {
 	}
 
 	// ensure copy-on-write
-	left := (*n.children)[i]
-	right := (*n.children)[i+1]
+	left := tr.cowLoad(&(*n.children)[i])
+	right := tr.cowLoad(&(*n.children)[i+1])
 
 	if len(left.items)+len(right.items) < maxItems {
 		// Merges the left and right children nodes together as a single node
@@ -380,7 +422,9 @@ func (tr *Map[K, V]) Ascend(pivot K, iter func(key K, value V) bool) {
 
 // The return value of this function determines whether we should keep iterating
 // upon this functions return.
-func (tr *Map[K, V]) ascend(n *mapNode[K, V], pivot K, iter func(key K, value V) bool) bool {
+func (tr *Map[K, V]) ascend(n *mapNode[K, V], pivot K,
+	iter func(key K, value V) bool,
+) bool {
 	i, found := tr.find(n, pivot)
 	if !found {
 		if !n.leaf() {
@@ -446,7 +490,8 @@ func (tr *Map[K, V]) Descend(pivot K, iter func(key K, value V) bool) {
 	tr.descend(tr.root, pivot, iter)
 }
 
-func (tr *Map[K, V]) descend(n *mapNode[K, V], pivot K, iter func(key K, value V) bool,
+func (tr *Map[K, V]) descend(n *mapNode[K, V], pivot K,
+	iter func(key K, value V) bool,
 ) bool {
 	i, found := tr.find(n, pivot)
 	if !found {
@@ -476,7 +521,7 @@ func (tr *Map[K, V]) Load(key K, value V) (V, bool) {
 	if tr.root == nil {
 		return tr.Set(item.key, item.value)
 	}
-	n := tr.root
+	n := tr.cowLoad(&tr.root)
 	for {
 		n.count++ // optimistically update counts
 		if n.leaf() {
@@ -489,7 +534,7 @@ func (tr *Map[K, V]) Load(key K, value V) (V, bool) {
 			}
 			break
 		}
-		n = (*n.children)[len(*n.children)-1]
+		n = tr.cowLoad(&(*n.children)[len(*n.children)-1])
 	}
 	// revert the counts
 	n = tr.root
@@ -541,7 +586,7 @@ func (tr *Map[K, V]) PopMin() (K, V, bool) {
 	if tr.root == nil {
 		return tr.empty.key, tr.empty.value, false
 	}
-	n := tr.root
+	n := tr.cowLoad(&tr.root)
 	var item mapPair[K, V]
 	for {
 		n.count-- // optimistically update counts
@@ -559,7 +604,7 @@ func (tr *Map[K, V]) PopMin() (K, V, bool) {
 			}
 			return item.key, item.value, true
 		}
-		n = (*n.children)[0]
+		n = tr.cowLoad(&(*n.children)[0])
 	}
 	// revert the counts
 	n = tr.root
@@ -583,7 +628,7 @@ func (tr *Map[K, V]) PopMax() (K, V, bool) {
 	if tr.root == nil {
 		return tr.empty.key, tr.empty.value, false
 	}
-	n := tr.root
+	n := tr.cowLoad(&tr.root)
 	var item mapPair[K, V]
 	for {
 		n.count-- // optimistically update counts
@@ -600,7 +645,7 @@ func (tr *Map[K, V]) PopMax() (K, V, bool) {
 			}
 			return item.key, item.value, true
 		}
-		n = (*n.children)[len(*n.children)-1]
+		n = tr.cowLoad(&(*n.children)[len(*n.children)-1])
 	}
 	// revert the counts
 	n = tr.root
@@ -651,7 +696,7 @@ func (tr *Map[K, V]) DeleteAt(index int) (K, V, bool) {
 	var pathbuf [8]uint8 // track the path
 	path := pathbuf[:0]
 	var item mapPair[K, V]
-	n := tr.root
+	n := tr.cowLoad(&tr.root)
 outer:
 	for {
 		n.count-- // optimistically update counts
@@ -683,7 +728,7 @@ outer:
 			index -= (*n.children)[i].count + 1
 		}
 		path = append(path, uint8(i))
-		n = (*n.children)[i]
+		n = tr.cowLoad(&(*n.children)[i])
 	}
 	// revert the counts
 	n = tr.root
@@ -900,7 +945,8 @@ func (iter *MapIter[K, V]) Prev() bool {
 	} else {
 		n := (*s.n.children)[s.i]
 		for {
-			iter.stack = append(iter.stack, mapIterStackItem[K, V]{n, len(n.items)})
+			iter.stack = append(iter.stack,
+				mapIterStackItem[K, V]{n, len(n.items)})
 			if n.leaf() {
 				iter.stack[len(iter.stack)-1].i--
 				break

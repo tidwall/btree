@@ -4,6 +4,13 @@ type Set[K ordered] struct {
 	base Map[K, struct{}]
 }
 
+// Copy
+func (tr *Set[K]) Copy() *Set[K] {
+	tr2 := new(Set[K])
+	tr2.base = *tr.base.Copy()
+	return tr2
+}
+
 // Insert an item
 func (tr *Set[K]) Insert(key K) {
 	tr.base.Set(key, struct{}{})
@@ -155,4 +162,9 @@ func (iter *SetIter[K]) Prev() bool {
 // Key returns the current iterator item key.
 func (iter *SetIter[K]) Key() K {
 	return iter.base.Key()
+}
+
+// Keys returns all the keys in order.
+func (tr *Set[K]) Keys() []K {
+	return tr.base.Keys()
 }
