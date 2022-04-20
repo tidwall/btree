@@ -61,6 +61,7 @@ func (tr *Map[K, V]) Copy() *Map[K, V] {
 	tr2 := new(Map[K, V])
 	*tr2 = *tr
 	tr2.cow = new(cow)
+	tr.cow = new(cow)
 	return tr2
 }
 
