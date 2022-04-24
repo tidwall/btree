@@ -449,7 +449,7 @@ This implementation was designed with performance in mind.
 - `go-arr`: A simple Go array
 
 The following benchmarks were run on my 2019 Macbook Pro (2.4 GHz 8-Core Intel Core i9) 
-using Go Development version 1.18 (beta1).
+using Go Development version 1.18.
 The items are simple 8-byte ints. 
 
 ```
