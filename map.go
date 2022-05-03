@@ -325,7 +325,6 @@ func (tr *Map[K, V]) delete(pn **mapNode[K, V], max bool, key K,
 		tr.nodeRebalance(n, i)
 	}
 	return prev, true
-
 }
 
 // nodeRebalance rebalances the child nodes following a delete operation.
@@ -623,7 +622,7 @@ func (tr *Map[K, V]) PopMin() (K, V, bool) {
 	return tr.empty.key, tr.empty.value, false
 }
 
-// PopMax removes the minimum item in tree and returns it.
+// PopMax removes the maximum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *Map[K, V]) PopMax() (K, V, bool) {
 	if tr.root == nil {

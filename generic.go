@@ -457,7 +457,6 @@ func (tr *Generic[T]) delete(cn **node[T], max bool, key T,
 		tr.nodeRebalance(n, i)
 	}
 	return prev, true
-
 }
 
 // nodeRebalance rebalances the child nodes following a delete operation.
@@ -769,7 +768,7 @@ func (tr *Generic[T]) PopMin() (T, bool) {
 	return tr.deleteHint(item, nil)
 }
 
-// PopMax removes the minimum item in tree and returns it.
+// PopMax removes the maximum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *Generic[T]) PopMax() (T, bool) {
 	if tr.lock() {

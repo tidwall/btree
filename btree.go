@@ -168,7 +168,7 @@ func (tr *BTree) PopMin() any {
 	return v
 }
 
-// PopMax removes the minimum item in tree and returns it.
+// PopMax removes the maximum item in tree and returns it.
 // Returns nil if the tree has no items.
 func (tr *BTree) PopMax() any {
 	v, ok := tr.base.PopMax()
