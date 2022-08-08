@@ -11,21 +11,23 @@ const (
 	minItems = maxItems / 2
 )
 
-type Generic[T any] struct {
-	mu    *sync.RWMutex
-	cow   *cow
-	root  *node[T]
-	count int
-	locks bool
-	less  func(a, b T) bool
-	empty T
+type Generic[T any, K any] struct {
+	mu         *sync.RWMutex
+	cow        *cow
+	root       *node[T, K]
+	count      int
+	locks      bool
+	less       func(a, b T) bool
+	accumulate func(a, b K) K
+	empty      T
 }
 
-type node[T any] struct {
-	cow      *cow
-	count    int
-	items    []T
-	children *[]*node[T]
+type node[T any, K any] struct {
+	cow         *cow
+	count       int
+	accumulated K
+	items       []T
+	children    *[]*node[T, K]
 }
 
 type cow struct {
@@ -45,39 +47,40 @@ type Options struct {
 }
 
 // New returns a new BTree
-func NewGeneric[T any](less func(a, b T) bool) *Generic[T] {
-	return NewGenericOptions(less, Options{})
+func NewGeneric[T any, K any](less func(a, b T) bool, accumulate func(a, b K) K) *Generic[T, K] {
+	return NewGenericOptions(less, accumulate, Options{})
 }
 
-func NewGenericOptions[T any](less func(a, b T) bool, opts Options) *Generic[T] {
-	tr := new(Generic[T])
+func NewGenericOptions[T any, K any](less func(a, b T) bool, accumulate func(a, b K) K, opts Options) *Generic[T, K] {
+	tr := new(Generic[T, K])
 	tr.cow = new(cow)
 	tr.mu = new(sync.RWMutex)
 	tr.less = less
+	tr.accumulate = accumulate
 	tr.locks = !opts.NoLocks
 	return tr
 }
 
 // Less is a convenience function that performs a comparison of two items
 // using the same "less" function provided to New.
-func (tr *Generic[T]) Less(a, b T) bool {
+func (tr *Generic[T, K]) Less(a, b T) bool {
 	return tr.less(a, b)
 }
 
-func (tr *Generic[T]) newNode(leaf bool) *node[T] {
-	n := &node[T]{cow: tr.cow}
+func (tr *Generic[T, K]) newNode(leaf bool) *node[T, K] {
+	n := &node[T, K]{cow: tr.cow}
 	if !leaf {
-		n.children = new([]*node[T])
+		n.children = new([]*node[T, K])
 	}
 	return n
 }
 
 // leaf returns true if the node is a leaf.
-func (n *node[T]) leaf() bool {
+func (n *node[T, K]) leaf() bool {
 	return n.children == nil
 }
 
-func (tr *Generic[T]) find(n *node[T], key T, hint *PathHint, depth int,
+func (tr *Generic[T, K]) find(n *node[T, K], key T, hint *PathHint, depth int,
 ) (index int, found bool) {
 	if hint == nil {
 		// fast path for no hinting
@@ -172,14 +175,14 @@ path_match:
 }
 
 // SetHint sets or replace a value for a key using a path hint
-func (tr *Generic[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
+func (tr *Generic[T, K]) SetHint(item T, weight K, hint *PathHint) (prev T, replaced bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
-	return tr.setHint(item, hint)
+	return tr.setHint(item, weight, hint)
 }
 
-func (tr *Generic[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
+func (tr *Generic[T, K]) setHint(item T, weight K, hint *PathHint) (prev T, replaced bool) {
 	if tr.root == nil {
 		tr.root = tr.newNode(true)
 		tr.root.items = append([]T{}, item)
@@ -187,16 +190,17 @@ func (tr *Generic[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
 		tr.count = 1
 		return tr.empty, false
 	}
+
 	prev, replaced, split := tr.nodeSet(&tr.root, item, hint, 0)
 	if split {
 		left := tr.cowLoad(&tr.root)
 		right, median := tr.nodeSplit(left)
 		tr.root = tr.newNode(false)
-		*tr.root.children = make([]*node[T], 0, maxItems+1)
-		*tr.root.children = append([]*node[T]{}, left, right)
+		*tr.root.children = make([]*node[T, K], 0, maxItems+1)
+		*tr.root.children = append([]*node[T, K]{}, left, right)
 		tr.root.items = append([]T{}, median)
 		tr.root.updateCount()
-		return tr.setHint(item, hint)
+		return tr.setHint(item, weight, hint)
 	}
 	if replaced {
 		return prev, true
@@ -206,11 +210,11 @@ func (tr *Generic[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
 }
 
 // Set or replace a value for a key
-func (tr *Generic[T]) Set(item T) (T, bool) {
-	return tr.SetHint(item, nil)
+func (tr *Generic[T, K]) Set(item T, weight K) (T, bool) {
+	return tr.SetHint(item, weight, nil)
 }
 
-func (tr *Generic[T]) nodeSplit(n *node[T]) (right *node[T], median T) {
+func (tr *Generic[T, K]) nodeSplit(n *node[T, K]) (right *node[T, K], median T) {
 	i := maxItems / 2
 	median = n.items[i]
 
@@ -219,7 +223,7 @@ func (tr *Generic[T]) nodeSplit(n *node[T]) (right *node[T], median T) {
 	left.items = make([]T, len(n.items[:i]), maxItems/2)
 	copy(left.items, n.items[:i])
 	if !n.leaf() {
-		*left.children = make([]*node[T], len((*n.children)[:i+1]), maxItems+1)
+		*left.children = make([]*node[T, K], len((*n.children)[:i+1]), maxItems+1)
 		copy(*left.children, (*n.children)[:i+1])
 	}
 	left.updateCount()
@@ -229,7 +233,7 @@ func (tr *Generic[T]) nodeSplit(n *node[T]) (right *node[T], median T) {
 	right.items = make([]T, len(n.items[i+1:]), maxItems/2)
 	copy(right.items, n.items[i+1:])
 	if !n.leaf() {
-		*right.children = make([]*node[T], len((*n.children)[i+1:]), maxItems+1)
+		*right.children = make([]*node[T, K], len((*n.children)[i+1:]), maxItems+1)
 		copy(*right.children, (*n.children)[i+1:])
 	}
 	right.updateCount()
@@ -273,9 +277,7 @@ func (tr *Generic[T]) cowLoad(cn **node[T]) *node[T] {
 	return *cn
 }
 
-func (tr *Generic[T]) nodeSet(cn **node[T], item T,
-	hint *PathHint, depth int,
-) (prev T, replaced bool, split bool) {
+func (tr *Generic[T, K]) nodeSet(cn **node[T, K], item T, hint *PathHint, depth int) (prev T, replaced bool, split bool) {
 	n := tr.cowLoad(cn)
 	i, found := tr.find(n, item, hint, depth)
 	if found {

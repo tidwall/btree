@@ -106,15 +106,15 @@ func TestSet(t *testing.T) {
 			msg, ok := recover().(string)
 			assert(ok && msg == "nil item")
 		}()
-		tr := NewNonConcurrent(intLess)
-		tr.Set(nil)
+		tr := NewNonConcurrent(intLess, nil)
+		tr.Set(nil, nil)
 	}()
 	func() {
 		defer func() {
 			msg, ok := recover().(string)
 			assert(ok && msg == "nil item")
 		}()
-		tr := NewNonConcurrent(intLess)
+		tr := NewNonConcurrent(intLess, nil)
 		tr.Load(nil)
 	}()
 	for i := 0; i < N; i++ {

@@ -8,12 +8,12 @@ type BTree struct {
 }
 
 // New returns a new BTree
-func New(less func(a, b any) bool) *BTree {
+func New(less func(a, b any) bool, accumulate func(a, b any) any) *BTree {
 	if less == nil {
 		panic("nil less")
 	}
 	return &BTree{
-		base: NewGeneric(less),
+		base: NewGeneric(less, accumulate),
 	}
 }
 
@@ -22,15 +22,12 @@ func New(less func(a, b any) bool) *BTree {
 //
 // This is useful for when you do not need the BTree to manage the locking,
 // but would rather do it yourself.
-func NewNonConcurrent(less func(a, b any) bool) *BTree {
+func NewNonConcurrent(less func(a, b any) bool, accumulate func(a, b any) any) *BTree {
 	if less == nil {
 		panic("nil less")
 	}
 	return &BTree{
-		base: NewGenericOptions(less,
-			Options{
-				NoLocks: true,
-			}),
+		base: NewGenericOptions(less, accumulate, Options{NoLocks: true}),
 	}
 }
 
@@ -42,7 +39,7 @@ func (tr *BTree) Less(a, b any) bool {
 
 // Set or replace a value for a key
 // Returns the value for the replaced item or nil if the key was not found.
-func (tr *BTree) Set(item any) (prev any) {
+func (tr *BTree) Set(item, acc any) (prev any) {
 	return tr.SetHint(item, nil)
 }
 
