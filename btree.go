@@ -90,13 +90,13 @@ func (tr *BTree) Len() int {
 
 // Delete an item for a key.
 // Returns the deleted value or nil if the key was not found.
-func (tr *BTree) Delete(key any) (prev any) {
+func (tr *BTree) Delete(key Item[Integer]) (prev Item[Integer]) {
 	return tr.DeleteHint(key, nil)
 }
 
 // DeleteHint deletes a value for a key using a path hint
 // Returns the deleted value or nil if the key was not found.
-func (tr *BTree) DeleteHint(key any, hint *PathHint) (prev any) {
+func (tr *BTree) DeleteHint(key Item[Integer], hint *PathHint) (prev Item[Integer]) {
 	if key == nil {
 		return nil
 	}
@@ -110,7 +110,7 @@ func (tr *BTree) DeleteHint(key any, hint *PathHint) (prev any) {
 // Ascend the tree within the range [pivot, last]
 // Pass nil for pivot to scan all item in ascending order
 // Return false to stop iterating
-func (tr *BTree) Ascend(pivot any, iter func(item any) bool) {
+func (tr *BTree) Ascend(pivot Item[Integer], iter func(item Item[Integer]) bool) {
 	if pivot == nil {
 		tr.base.Scan(iter)
 	} else {
@@ -121,7 +121,7 @@ func (tr *BTree) Ascend(pivot any, iter func(item any) bool) {
 // Descend the tree within the range [pivot, first]
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
-func (tr *BTree) Descend(pivot any, iter func(item any) bool) {
+func (tr *BTree) Descend(pivot Item[Integer], iter func(item Item[Integer]) bool) {
 	if pivot == nil {
 		tr.base.Reverse(iter)
 	} else {
@@ -132,7 +132,7 @@ func (tr *BTree) Descend(pivot any, iter func(item any) bool) {
 // Load is for bulk loading pre-sorted items
 // If the load replaces and existing item then the value for the replaced item
 // is returned.
-func (tr *BTree) Load(item any) (prev any) {
+func (tr *BTree) Load(item Item[Integer]) (prev Item[Integer]) {
 	if item == nil {
 		panic("nil item")
 	}
@@ -145,7 +145,7 @@ func (tr *BTree) Load(item any) (prev any) {
 
 // Min returns the minimum item in tree.
 // Returns nil if the tree has no items.
-func (tr *BTree) Min() any {
+func (tr *BTree) Min() Item[Integer] {
 	v, ok := tr.base.Min()
 	if !ok {
 		return nil
@@ -155,7 +155,7 @@ func (tr *BTree) Min() any {
 
 // Max returns the maximum item in tree.
 // Returns nil if the tree has no items.
-func (tr *BTree) Max() any {
+func (tr *BTree) Max() Item[Integer] {
 	v, ok := tr.base.Max()
 	if !ok {
 		return nil
@@ -165,7 +165,7 @@ func (tr *BTree) Max() any {
 
 // PopMin removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
-func (tr *BTree) PopMin() any {
+func (tr *BTree) PopMin() Item[Integer] {
 	v, ok := tr.base.PopMin()
 	if !ok {
 		return nil
@@ -175,7 +175,7 @@ func (tr *BTree) PopMin() any {
 
 // PopMax removes the maximum item in tree and returns it.
 // Returns nil if the tree has no items.
-func (tr *BTree) PopMax() any {
+func (tr *BTree) PopMax() Item[Integer] {
 	v, ok := tr.base.PopMax()
 	if !ok {
 		return nil
@@ -185,7 +185,7 @@ func (tr *BTree) PopMax() any {
 
 // GetAt returns the value at index.
 // Return nil if the tree is empty or the index is out of bounds.
-func (tr *BTree) GetAt(index int) any {
+func (tr *BTree) GetAt(index int) Item[Integer] {
 	v, ok := tr.base.GetAt(index)
 	if !ok {
 		return nil
@@ -195,7 +195,7 @@ func (tr *BTree) GetAt(index int) any {
 
 // DeleteAt deletes the item at index.
 // Return nil if the tree is empty or the index is out of bounds.
-func (tr *BTree) DeleteAt(index int) any {
+func (tr *BTree) DeleteAt(index int) Item[Integer] {
 	v, ok := tr.base.DeleteAt(index)
 	if !ok {
 		return nil
@@ -211,8 +211,8 @@ func (tr *BTree) Height() int {
 
 // Walk iterates over all items in tree, in order.
 // The items param will contain one or more items.
-func (tr *BTree) Walk(iter func(items []any)) {
-	tr.base.Walk(func(items []any) bool {
+func (tr *BTree) Walk(iter func(items []Item[Integer])) {
+	tr.base.Walk(func(items []Item[Integer]) bool {
 		iter(items)
 		return true
 	})
@@ -225,7 +225,7 @@ func (tr *BTree) Copy() *BTree {
 }
 
 type Iter struct {
-	base GenericIter[any]
+	base GenericIter[Item[Integer], Integer]
 }
 
 // Iter returns a read-only iterator.
@@ -236,7 +236,7 @@ func (tr *BTree) Iter() Iter {
 
 // Seek to item greater-or-equal-to key.
 // Returns false if there was no item found.
-func (iter *Iter) Seek(key any) bool {
+func (iter *Iter) Seek(key Item[Integer]) bool {
 	return iter.base.Seek(key)
 }
 
@@ -273,6 +273,6 @@ func (iter *Iter) Prev() bool {
 }
 
 // Item returns the current iterator item.
-func (iter *Iter) Item() any {
+func (iter *Iter) Item() Item[Integer] {
 	return iter.base.Item()
 }
