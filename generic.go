@@ -11,18 +11,18 @@ const (
 	minItems = maxItems / 2
 )
 
-type Generic[T any, K any] struct {
-	mu         *sync.RWMutex
-	cow        *cow
-	root       *node[T, K]
-	count      int
-	locks      bool
-	less       func(a, b T) bool
-	accumulate func(a, b K) K
-	empty      T
+type Generic[T Item[K], K Integer] struct {
+	mu          *sync.RWMutex
+	cow         *cow
+	root        *node[T, K]
+	count       int
+	locks       bool
+	less        func(a, b T) bool
+	accumulator func(a, b K) K
+	empty       T
 }
 
-type node[T any, K any] struct {
+type node[T Item[K], K Integer] struct {
 	cow         *cow
 	count       int
 	accumulated K
@@ -47,16 +47,16 @@ type Options struct {
 }
 
 // New returns a new BTree
-func NewGeneric[T any, K any](less func(a, b T) bool, accumulate func(a, b K) K) *Generic[T, K] {
+func NewGeneric[T Item[K], K Integer](less func(a, b T) bool, accumulate func(a, b K) K) *Generic[T, K] {
 	return NewGenericOptions(less, accumulate, Options{})
 }
 
-func NewGenericOptions[T any, K any](less func(a, b T) bool, accumulate func(a, b K) K, opts Options) *Generic[T, K] {
+func NewGenericOptions[T Item[K], K Integer](less func(a, b T) bool, accumulator func(a, b K) K, opts Options) *Generic[T, K] {
 	tr := new(Generic[T, K])
 	tr.cow = new(cow)
 	tr.mu = new(sync.RWMutex)
 	tr.less = less
-	tr.accumulate = accumulate
+	tr.accumulator = accumulator
 	tr.locks = !opts.NoLocks
 	return tr
 }
@@ -80,12 +80,12 @@ func (n *node[T, K]) leaf() bool {
 	return n.children == nil
 }
 
-func (tr *Generic[T, K]) find(n *node[T, K], key T, hint *PathHint, depth int,
-) (index int, found bool) {
+func (tr *Generic[T, K]) find(n *node[T, K], key T, hint *PathHint, depth int) (index int, found bool) {
 	if hint == nil {
 		// fast path for no hinting
 		low := 0
 		high := len(n.items)
+
 		for low < high {
 			mid := (low + high) / 2
 			if !tr.Less(key, n.items[mid]) {
@@ -94,9 +94,11 @@ func (tr *Generic[T, K]) find(n *node[T, K], key T, hint *PathHint, depth int,
 				high = mid
 			}
 		}
+
 		if low > 0 && !tr.Less(n.items[low-1], key) {
 			return low - 1, true
 		}
+
 		return low, false
 	}
 
@@ -175,19 +177,21 @@ path_match:
 }
 
 // SetHint sets or replace a value for a key using a path hint
-func (tr *Generic[T, K]) SetHint(item T, weight K, hint *PathHint) (prev T, replaced bool) {
+func (tr *Generic[T, K]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
-	return tr.setHint(item, weight, hint)
+	return tr.setHint(item, hint)
 }
 
-func (tr *Generic[T, K]) setHint(item T, weight K, hint *PathHint) (prev T, replaced bool) {
+func (tr *Generic[T, K]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
 	if tr.root == nil {
 		tr.root = tr.newNode(true)
 		tr.root.items = append([]T{}, item)
 		tr.root.count = 1
+		tr.root.accumulated = item.Weight()
 		tr.count = 1
+
 		return tr.empty, false
 	}
 

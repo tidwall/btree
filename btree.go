@@ -3,12 +3,20 @@
 // license that can be found in the LICENSE file.
 package btree
 
-type BTree struct {
-	base *Generic[any]
-}
+type (
+	Integer any
+
+	Item[K Integer] interface {
+		Weight() K
+	}
+
+	BTree struct {
+		base *Generic[Item[Integer], Integer]
+	}
+)
 
 // New returns a new BTree
-func New(less func(a, b any) bool, accumulate func(a, b any) any) *BTree {
+func New(less func(a, b Item[Integer]) bool, accumulate func(a, b Integer) Integer) *BTree {
 	if less == nil {
 		panic("nil less")
 	}
@@ -22,7 +30,7 @@ func New(less func(a, b any) bool, accumulate func(a, b any) any) *BTree {
 //
 // This is useful for when you do not need the BTree to manage the locking,
 // but would rather do it yourself.
-func NewNonConcurrent(less func(a, b any) bool, accumulate func(a, b any) any) *BTree {
+func NewNonConcurrent(less func(a, b Item[Integer]) bool, accumulate func(a, b Integer) Integer) *BTree {
 	if less == nil {
 		panic("nil less")
 	}
@@ -33,19 +41,19 @@ func NewNonConcurrent(less func(a, b any) bool, accumulate func(a, b any) any) *
 
 // Less is a convenience function that performs a comparison of two items
 // using the same "less" function provided to New.
-func (tr *BTree) Less(a, b any) bool {
+func (tr *BTree) Less(a, b Item[Integer]) bool {
 	return tr.base.Less(a, b)
 }
 
 // Set or replace a value for a key
 // Returns the value for the replaced item or nil if the key was not found.
-func (tr *BTree) Set(item, acc any) (prev any) {
+func (tr *BTree) Set(item Item[Integer]) (prev Item[Integer]) {
 	return tr.SetHint(item, nil)
 }
 
 // SetHint sets or replace a value for a key using a path hint
 // Returns the value for the replaced item or nil if the key was not found.
-func (tr *BTree) SetHint(item any, hint *PathHint) (prev any) {
+func (tr *BTree) SetHint(item Item[Integer], hint *PathHint) (prev Item[Integer]) {
 	if item == nil {
 		panic("nil item")
 	}
@@ -58,13 +66,13 @@ func (tr *BTree) SetHint(item any, hint *PathHint) (prev any) {
 
 // Get a value for key.
 // Returns nil if the key was not found.
-func (tr *BTree) Get(key any) any {
+func (tr *BTree) Get(key Item) Item {
 	return tr.GetHint(key, nil)
 }
 
 // GetHint gets a value for key using a path hint.
 // Returns nil if the item was not found.
-func (tr *BTree) GetHint(key any, hint *PathHint) (value any) {
+func (tr *BTree) GetHint(key Item, hint *PathHint) (value Item) {
 	if key == nil {
 		return nil
 	}
