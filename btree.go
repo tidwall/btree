@@ -66,13 +66,13 @@ func (tr *BTree) SetHint(item Item[Integer], hint *PathHint) (prev Item[Integer]
 
 // Get a value for key.
 // Returns nil if the key was not found.
-func (tr *BTree) Get(key Item) Item {
+func (tr *BTree) Get(key Item[Integer]) Item[Integer] {
 	return tr.GetHint(key, nil)
 }
 
 // GetHint gets a value for key using a path hint.
 // Returns nil if the item was not found.
-func (tr *BTree) GetHint(key Item, hint *PathHint) (value Item) {
+func (tr *BTree) GetHint(key Item[Integer], hint *PathHint) (value Item[Integer]) {
 	if key == nil {
 		return nil
 	}
