@@ -126,8 +126,8 @@ func TestSet(t *testing.T) {
 	for i := 0; i < N; i++ {
 		assert(!tr.Contains(i))
 	}
-	assert(tr.base.less(1, 2))
-	assert(tr.base.less(2, 10))
+	assert(tr.base.lt(1, 2))
+	assert(tr.base.lt(2, 10))
 }
 
 func TestSetIter(t *testing.T) {

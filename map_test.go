@@ -33,7 +33,7 @@ func randMapKeys(N int) (keys []testMapKind) {
 	return keys
 }
 
-func (tr *Map[K, V]) lt(a, b K) bool  { return tr.less(a, b) }
+func (tr *Map[K, V]) lt(a, b K) bool  { return a < b }
 func (tr *Map[K, V]) eq(a, b K) bool  { return !(tr.lt(a, b) || tr.lt(b, a)) }
 func (tr *Map[K, V]) lte(a, b K) bool { return tr.lt(a, b) || tr.eq(a, b) }
 func (tr *Map[K, V]) gt(a, b K) bool  { return tr.lt(b, a) }
@@ -91,7 +91,7 @@ func TestMapDescend(t *testing.T) {
 			all = append(all, item)
 			return true
 		})
-		for len(exp) > 0 && tr.less(key, exp[0]) {
+		for len(exp) > 0 && tr.lt(key, exp[0]) {
 			exp = exp[1:]
 		}
 		var count int
@@ -147,7 +147,7 @@ func TestMapAscend(t *testing.T) {
 			all = append(all, item)
 			return true
 		})
-		for len(exp) > 0 && tr.less(exp[0], key) {
+		for len(exp) > 0 && tr.lt(exp[0], key) {
 			exp = exp[1:]
 		}
 		var count int
@@ -233,7 +233,7 @@ func TestMapSimpleRandom(t *testing.T) {
 		}
 		pivot := items[len(items)/2]
 		tr.Ascend(pivot, func(item, value testMapKind) bool {
-			if tr.less(item, pivot) {
+			if tr.lt(item, pivot) {
 				panic("!")
 			}
 			return true
@@ -245,7 +245,7 @@ func TestMapSimpleRandom(t *testing.T) {
 				return false
 			}
 			if index > 0 {
-				if tr.less(item, min) {
+				if tr.lt(item, min) {
 					panic("!")
 				}
 			}
@@ -777,13 +777,13 @@ func TestMapRandom(t *testing.T) {
 
 func TestMapLess(t *testing.T) {
 	tr := testMapNewBTree()
-	if !tr.less(testMapMakeItem(1), testMapMakeItem(2)) {
+	if !tr.lt(testMapMakeItem(1), testMapMakeItem(2)) {
 		panic("invalid")
 	}
-	if tr.less(testMapMakeItem(2), testMapMakeItem(1)) {
+	if tr.lt(testMapMakeItem(2), testMapMakeItem(1)) {
 		panic("invalid")
 	}
-	if tr.less(testMapMakeItem(1), testMapMakeItem(1)) {
+	if tr.lt(testMapMakeItem(1), testMapMakeItem(1)) {
 		panic("invalid")
 	}
 }
@@ -1072,7 +1072,7 @@ func (tr *Map[K, V]) saneorder() bool {
 	var bad bool
 	tr.Scan(func(key K, value V) bool {
 		if count > 0 {
-			if !tr.less(last, key) {
+			if !tr.lt(last, key) {
 				bad = true
 				return false
 			}

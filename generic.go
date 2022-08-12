@@ -3,7 +3,10 @@
 // license that can be found in the LICENSE file.
 package btree
 
-import "sync"
+import (
+	"sort"
+	"sync"
+)
 
 const (
 	degree   = 128
@@ -77,27 +80,26 @@ func (n *node[T]) leaf() bool {
 	return n.children == nil
 }
 
+func (tr *Generic[T]) bsearch(n *node[T], key T) (index int, found bool) {
+	i := sort.Search(len(n.items), func(i int) bool {
+		return tr.less(key, n.items[i])
+	})
+	if i > 0 && !tr.less(n.items[i-1], key) {
+		return i - 1, true
+	}
+	return i, false
+}
+
 func (tr *Generic[T]) find(n *node[T], key T, hint *PathHint, depth int,
 ) (index int, found bool) {
 	if hint == nil {
-		// fast path for no hinting
-		low := 0
-		high := len(n.items)
-		for low < high {
-			mid := (low + high) / 2
-			if !tr.Less(key, n.items[mid]) {
-				low = mid + 1
-			} else {
-				high = mid
-			}
-		}
-		if low > 0 && !tr.Less(n.items[low-1], key) {
-			return low - 1, true
-		}
-		return low, false
+		return tr.bsearch(n, key)
 	}
+	return tr.hintsearch(n, key, hint, depth)
+}
 
-	// Try using hint.
+func (tr *Generic[T]) hintsearch(n *node[T], key T, hint *PathHint, depth int,
+) (index int, found bool) {
 	// Best case finds the exact match, updates the hint and returns.
 	// Worst case, updates the low and high bounds to binary search between.
 	low := 0
@@ -173,10 +175,14 @@ path_match:
 
 // SetHint sets or replace a value for a key using a path hint
 func (tr *Generic[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
-	if tr.lock() {
-		defer tr.unlock()
+	if tr.locks {
+		tr.mu.Lock()
+		prev, replaced = tr.setHint(item, hint)
+		tr.mu.Unlock()
+	} else {
+		prev, replaced = tr.setHint(item, hint)
 	}
-	return tr.setHint(item, hint)
+	return prev, replaced
 }
 
 func (tr *Generic[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
@@ -214,25 +220,32 @@ func (tr *Generic[T]) nodeSplit(n *node[T]) (right *node[T], median T) {
 	i := maxItems / 2
 	median = n.items[i]
 
-	// left node
-	left := tr.newNode(n.leaf())
-	left.items = make([]T, len(n.items[:i]), maxItems/2)
-	copy(left.items, n.items[:i])
-	if !n.leaf() {
-		*left.children = make([]*node[T], len((*n.children)[:i+1]), maxItems+1)
-		copy(*left.children, (*n.children)[:i+1])
-	}
-	left.updateCount()
-
 	// right node
 	right = tr.newNode(n.leaf())
 	right.items = make([]T, len(n.items[i+1:]), maxItems/2)
 	copy(right.items, n.items[i+1:])
 	if !n.leaf() {
-		*right.children = make([]*node[T], len((*n.children)[i+1:]), maxItems+1)
+		*right.children =
+			make([]*node[T], len((*n.children)[i+1:]), maxItems+1)
 		copy(*right.children, (*n.children)[i+1:])
 	}
 	right.updateCount()
+
+	// left node
+	for j := i; j < len(n.items); j++ {
+		n.items[j] = tr.empty
+	}
+	if !n.leaf() {
+		for j := i + 1; j < len((*n.children)); j++ {
+			(*n.children)[j] = nil
+		}
+	}
+	left := n
+	left.items = n.items[:i]
+	if !n.leaf() {
+		*left.children = (*n.children)[:i+1]
+	}
+	left.updateCount()
 
 	*n = *left
 	return right, median
@@ -276,8 +289,17 @@ func (tr *Generic[T]) cowLoad(cn **node[T]) *node[T] {
 func (tr *Generic[T]) nodeSet(cn **node[T], item T,
 	hint *PathHint, depth int,
 ) (prev T, replaced bool, split bool) {
-	n := tr.cowLoad(cn)
-	i, found := tr.find(n, item, hint, depth)
+	if (*cn).cow != tr.cow {
+		*cn = tr.copy(*cn)
+	}
+	n := *cn
+	var i int
+	var found bool
+	if hint == nil {
+		i, found = tr.bsearch(n, item)
+	} else {
+		i, found = tr.hintsearch(n, item, hint, depth)
+	}
 	if found {
 		prev = n.items[i]
 		n.items[i] = item
@@ -345,14 +367,37 @@ func (n *node[T]) scan(iter func(item T) bool) bool {
 
 // Get a value for key
 func (tr *Generic[T]) Get(key T) (T, bool) {
-	return tr.GetHint(key, nil)
+	if tr.locks {
+		return tr.GetHint(key, nil)
+	}
+	if tr.root == nil {
+		return tr.empty, false
+	}
+	n := tr.root
+	for {
+		i := sort.Search(len(n.items), func(i int) bool {
+			return tr.less(key, n.items[i])
+		})
+		if i > 0 && !tr.less(n.items[i-1], key) {
+			return n.items[i-1], true
+		}
+		if n.children == nil {
+			return tr.empty, false
+		}
+		n = (*n.children)[i]
+	}
 }
 
 // GetHint gets a value for key using a path hint
-func (tr *Generic[T]) GetHint(key T, hint *PathHint) (T, bool) {
+func (tr *Generic[T]) GetHint(key T, hint *PathHint) (value T, ok bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
+	return tr.getHint(key, hint)
+}
+
+// GetHint gets a value for key using a path hint
+func (tr *Generic[T]) getHint(key T, hint *PathHint) (T, bool) {
 	if tr.root == nil {
 		return tr.empty, false
 	}
