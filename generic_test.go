@@ -51,8 +51,8 @@ func testMakeItem(x int) (item testKind) {
 }
 
 // testNewBTree must return an operational btree for testing.
-func testNewBTree() *Generic[testKind] {
-	return NewGeneric(testLess)
+func testNewBTree() *BTreeG[testKind] {
+	return NewBTreeG(testLess)
 }
 
 func randKeys(N int) (keys []testKind) {
@@ -63,14 +63,14 @@ func randKeys(N int) (keys []testKind) {
 	return keys
 }
 
-func (tr *Generic[T]) lt(a, b T) bool  { return tr.less(a, b) }
-func (tr *Generic[T]) eq(a, b T) bool  { return !(tr.lt(a, b) || tr.lt(b, a)) }
-func (tr *Generic[T]) lte(a, b T) bool { return tr.lt(a, b) || tr.eq(a, b) }
-func (tr *Generic[T]) gt(a, b T) bool  { return tr.lt(b, a) }
-func (tr *Generic[T]) gte(a, b T) bool { return tr.gt(a, b) || tr.eq(a, b) }
+func (tr *BTreeG[T]) lt(a, b T) bool  { return tr.less(a, b) }
+func (tr *BTreeG[T]) eq(a, b T) bool  { return !(tr.lt(a, b) || tr.lt(b, a)) }
+func (tr *BTreeG[T]) lte(a, b T) bool { return tr.lt(a, b) || tr.eq(a, b) }
+func (tr *BTreeG[T]) gt(a, b T) bool  { return tr.lt(b, a) }
+func (tr *BTreeG[T]) gte(a, b T) bool { return tr.gt(a, b) || tr.eq(a, b) }
 
 func kindsAreEqual(a, b []testKind) bool {
-	tr := NewGeneric(testLess)
+	tr := NewBTreeG(testLess)
 	if len(a) != len(b) {
 		return false
 	}
@@ -854,9 +854,9 @@ func TestGenericCopy(t *testing.T) {
 		tr.Set(items[i])
 	}
 	var wait int32
-	var testCopyDeep func(tr *Generic[testKind], parent bool)
+	var testCopyDeep func(tr *BTreeG[testKind], parent bool)
 
-	testCopyDeep = func(tr *Generic[testKind], parent bool) {
+	testCopyDeep = func(tr *BTreeG[testKind], parent bool) {
 		defer func() { atomic.AddInt32(&wait, -1) }()
 		if parent {
 			// 2 grandchildren
@@ -1027,7 +1027,7 @@ func TestGenericVarious(t *testing.T) {
 	}
 }
 
-func (tr *Generic[T]) sane() {
+func (tr *BTreeG[T]) sane() {
 	if err := tr.Sane(); err != nil {
 		panic(err)
 	}
@@ -1044,7 +1044,7 @@ func (err saneError) Error() string {
 // - deep count matches the btree count.
 // - all nodes have the correct number of items and counts.
 // - all items are in order.
-func (tr *Generic[T]) Sane() error {
+func (tr *BTreeG[T]) Sane() error {
 	if tr == nil {
 		return nil
 	}
@@ -1068,7 +1068,7 @@ func (tr *Generic[T]) Sane() error {
 
 // btree_saneheight returns true if the height of all leaves match the height
 // of the btree.
-func (tr *Generic[T]) saneheight() bool {
+func (tr *BTreeG[T]) saneheight() bool {
 	height := tr.Height()
 	if tr.root != nil {
 		if height == 0 {
@@ -1099,7 +1099,7 @@ func (n *node[T]) saneheight(height, maxheight int) bool {
 }
 
 // btree_deepcount returns the number of items in the btree.
-func (tr *Generic[T]) deepcount() int {
+func (tr *BTreeG[T]) deepcount() int {
 	if tr.root != nil {
 		return tr.root.deepcount()
 	}
@@ -1119,7 +1119,7 @@ func (n *node[T]) deepcount() int {
 	return count
 }
 
-func (tr *Generic[T]) nodesaneprops(n *node[T], height int) bool {
+func (tr *BTreeG[T]) nodesaneprops(n *node[T], height int) bool {
 	if height == 1 {
 		if len(n.items) < 1 || len(n.items) > maxItems {
 			println(len(n.items) < 1)
@@ -1150,14 +1150,14 @@ func (tr *Generic[T]) nodesaneprops(n *node[T], height int) bool {
 	return true
 }
 
-func (tr *Generic[T]) saneprops() bool {
+func (tr *BTreeG[T]) saneprops() bool {
 	if tr.root != nil {
 		return tr.nodesaneprops(tr.root, 1)
 	}
 	return true
 }
 
-func (tr *Generic[T]) sanenilsnode(n *node[T]) bool {
+func (tr *BTreeG[T]) sanenilsnode(n *node[T]) bool {
 	items := n.items[:cap(n.items):cap(n.items)]
 	for i := len(n.items); i < len(items); i++ {
 		if !tr.eq(items[i], tr.empty) {
@@ -1188,14 +1188,14 @@ func (tr *Generic[T]) sanenilsnode(n *node[T]) bool {
 // sanenils checks that all the slots in the item slice that are not used,
 //   n.items[len(n.items):cap(n.items):cap(n.items)]
 // are equal to the empty value of the kind.
-func (tr *Generic[T]) sanenils() bool {
+func (tr *BTreeG[T]) sanenils() bool {
 	if tr.root != nil {
 		return tr.sanenilsnode(tr.root)
 	}
 	return true
 }
 
-func (tr *Generic[T]) saneorder() bool {
+func (tr *BTreeG[T]) saneorder() bool {
 	var last T
 	var count int
 	var bad bool
@@ -1304,7 +1304,7 @@ func TestGenericIter(t *testing.T) {
 }
 
 func TestGenericIterSeek(t *testing.T) {
-	tr := NewGeneric(func(a, b int) bool {
+	tr := NewBTreeG(func(a, b int) bool {
 		return a < b
 	})
 	var all []int
@@ -1333,7 +1333,7 @@ func TestGenericIterSeek(t *testing.T) {
 }
 
 func TestGenericIterSeekPrefix(t *testing.T) {
-	tr := NewGeneric(func(a, b int) bool {
+	tr := NewBTreeG(func(a, b int) bool {
 		return a < b
 	})
 	count := 10_000

@@ -3,6 +3,8 @@
 // license that can be found in the LICENSE file.
 package btree
 
+import "sync/atomic"
+
 type ordered interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
@@ -18,14 +20,14 @@ type mapPair[K ordered, V any] struct {
 }
 
 type Map[K ordered, V any] struct {
-	cow   *cow
+	cow   uint64
 	root  *mapNode[K, V]
 	count int
 	empty mapPair[K, V]
 }
 
 type mapNode[K ordered, V any] struct {
-	cow      *cow
+	cow      uint64
 	count    int
 	items    []mapPair[K, V]
 	children *[]*mapNode[K, V]
@@ -60,8 +62,8 @@ func (tr *Map[K, V]) cowLoad(cn **mapNode[K, V]) *mapNode[K, V] {
 func (tr *Map[K, V]) Copy() *Map[K, V] {
 	tr2 := new(Map[K, V])
 	*tr2 = *tr
-	tr2.cow = new(cow)
-	tr.cow = new(cow)
+	tr2.cow = atomic.AddUint64(&gcow, 1)
+	tr.cow = atomic.AddUint64(&gcow, 1)
 	return tr2
 }
 
@@ -127,36 +129,49 @@ func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V],
 ) (right *mapNode[K, V], median mapPair[K, V]) {
 	i := maxItems / 2
 	median = n.items[i]
-	n.items[i] = tr.empty
+
+	const sliceItems = true
 
 	// right node
 	right = tr.newNode(n.leaf())
-	right.items = make([]mapPair[K, V], len(n.items[i+1:]), maxItems/2)
-	copy(right.items, n.items[i+1:])
-	if !n.leaf() {
-		*right.children = make([]*mapNode[K, V],
-			len((*n.children)[i+1:]), maxItems+1)
-		copy(*right.children, (*n.children)[i+1:])
+	if sliceItems {
+		right.items = n.items[i+1:]
+		if !n.leaf() {
+			*right.children = (*n.children)[i+1:]
+		}
+	} else {
+		right.items = make([]mapPair[K, V], len(n.items[i+1:]), maxItems/2)
+		copy(right.items, n.items[i+1:])
+		if !n.leaf() {
+			*right.children = make([]*mapNode[K, V],
+				len((*n.children)[i+1:]), maxItems+1)
+			copy(*right.children, (*n.children)[i+1:])
+		}
 	}
 	right.updateCount()
 
 	// left node
-	for j := i; j < len(n.items); j++ {
-		n.items[j] = tr.empty
-	}
-	if !n.leaf() {
-		for j := i + 1; j < len((*n.children)); j++ {
-			(*n.children)[j] = nil
+	if sliceItems {
+		n.items[i] = tr.empty
+		n.items = n.items[:i:i]
+		if !n.leaf() {
+			*n.children = (*n.children)[: i+1 : i+1]
+		}
+	} else {
+		for j := i; j < len(n.items); j++ {
+			n.items[j] = tr.empty
+		}
+		if !n.leaf() {
+			for j := i + 1; j < len((*n.children)); j++ {
+				(*n.children)[j] = nil
+			}
+		}
+		n.items = n.items[:i]
+		if !n.leaf() {
+			*n.children = (*n.children)[:i+1]
 		}
 	}
-	left := n
-	left.items = n.items[:i]
-	if !n.leaf() {
-		*left.children = (*n.children)[:i+1]
-	}
-	left.updateCount()
-
-	*n = *left
+	n.updateCount()
 	return right, median
 }
 

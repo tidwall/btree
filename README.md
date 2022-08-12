@@ -31,11 +31,11 @@ Go 1.18+
 - [`btree.Set`](#btreeset):
 Like `Map`, but only for storing keys.
 Go 1.18+
-- [`btree.Generic`](#btreegeneric):
+- [`btree.BTreeG`](#btreegeneric):
 A feature-rich B-tree for storing data using a custom comparator.
 Go 1.18+
 - [`btree.BTree`](#btreebtree):
-Like `Generic` but uses the `interface{}` type for data. Backwards compatible.
+Like `BTreeG` but uses the `interface{}` type for data. Backwards compatible.
 Go 1.16+
 
 ### btree.Map
@@ -194,7 +194,7 @@ func main() {
 }
 ```
 
-### btree.Generic
+### btree.BTreeG
 
 ```go
 // Basic
@@ -265,8 +265,8 @@ func main() {
 	// Create a tree for keys and a tree for values.
 	// The "keys" tree will be sorted on the Keys field.
 	// The "values" tree will be sorted on the Values field.
-	keys := btree.NewGeneric[Item](byKeys)
-	vals := btree.NewGeneric[Item](byVals)
+	keys := btree.NewBTreeG[Item](byKeys)
+	vals := btree.NewBTreeG[Item](byVals)
 
 	// Create some items.
 	users := []Item{

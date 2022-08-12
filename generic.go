@@ -6,6 +6,7 @@ package btree
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 )
 
 const (
@@ -14,9 +15,9 @@ const (
 	minItems = maxItems / 2
 )
 
-type Generic[T any] struct {
+type BTreeG[T any] struct {
 	mu    *sync.RWMutex
-	cow   *cow
+	cow   uint64
 	root  *node[T]
 	count int
 	locks bool
@@ -25,15 +26,13 @@ type Generic[T any] struct {
 }
 
 type node[T any] struct {
-	cow      *cow
+	cow      uint64
 	count    int
 	items    []T
 	children *[]*node[T]
 }
 
-type cow struct {
-	_ int // cannot be an empty struct
-}
+var gcow uint64
 
 // PathHint is a utility type used with the *Hint() functions. Hints provide
 // faster operations for clustered keys.
@@ -48,13 +47,13 @@ type Options struct {
 }
 
 // New returns a new BTree
-func NewGeneric[T any](less func(a, b T) bool) *Generic[T] {
-	return NewGenericOptions(less, Options{})
+func NewBTreeG[T any](less func(a, b T) bool) *BTreeG[T] {
+	return NewBTreeGOptions(less, Options{})
 }
 
-func NewGenericOptions[T any](less func(a, b T) bool, opts Options) *Generic[T] {
-	tr := new(Generic[T])
-	tr.cow = new(cow)
+func NewBTreeGOptions[T any](less func(a, b T) bool, opts Options) *BTreeG[T] {
+	tr := new(BTreeG[T])
+	tr.cow = atomic.AddUint64(&gcow, 1)
 	tr.mu = new(sync.RWMutex)
 	tr.less = less
 	tr.locks = !opts.NoLocks
@@ -63,11 +62,11 @@ func NewGenericOptions[T any](less func(a, b T) bool, opts Options) *Generic[T] 
 
 // Less is a convenience function that performs a comparison of two items
 // using the same "less" function provided to New.
-func (tr *Generic[T]) Less(a, b T) bool {
+func (tr *BTreeG[T]) Less(a, b T) bool {
 	return tr.less(a, b)
 }
 
-func (tr *Generic[T]) newNode(leaf bool) *node[T] {
+func (tr *BTreeG[T]) newNode(leaf bool) *node[T] {
 	n := &node[T]{cow: tr.cow}
 	if !leaf {
 		n.children = new([]*node[T])
@@ -80,7 +79,7 @@ func (n *node[T]) leaf() bool {
 	return n.children == nil
 }
 
-func (tr *Generic[T]) bsearch(n *node[T], key T) (index int, found bool) {
+func (tr *BTreeG[T]) bsearch(n *node[T], key T) (index int, found bool) {
 	i := sort.Search(len(n.items), func(i int) bool {
 		return tr.less(key, n.items[i])
 	})
@@ -90,7 +89,7 @@ func (tr *Generic[T]) bsearch(n *node[T], key T) (index int, found bool) {
 	return i, false
 }
 
-func (tr *Generic[T]) find(n *node[T], key T, hint *PathHint, depth int,
+func (tr *BTreeG[T]) find(n *node[T], key T, hint *PathHint, depth int,
 ) (index int, found bool) {
 	if hint == nil {
 		return tr.bsearch(n, key)
@@ -98,7 +97,7 @@ func (tr *Generic[T]) find(n *node[T], key T, hint *PathHint, depth int,
 	return tr.hintsearch(n, key, hint, depth)
 }
 
-func (tr *Generic[T]) hintsearch(n *node[T], key T, hint *PathHint, depth int,
+func (tr *BTreeG[T]) hintsearch(n *node[T], key T, hint *PathHint, depth int,
 ) (index int, found bool) {
 	// Best case finds the exact match, updates the hint and returns.
 	// Worst case, updates the low and high bounds to binary search between.
@@ -174,7 +173,7 @@ path_match:
 }
 
 // SetHint sets or replace a value for a key using a path hint
-func (tr *Generic[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
+func (tr *BTreeG[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
 	if tr.locks {
 		tr.mu.Lock()
 		prev, replaced = tr.setHint(item, hint)
@@ -185,7 +184,7 @@ func (tr *Generic[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
 	return prev, replaced
 }
 
-func (tr *Generic[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
+func (tr *BTreeG[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
 	if tr.root == nil {
 		tr.root = tr.newNode(true)
 		tr.root.items = append([]T{}, item)
@@ -212,42 +211,57 @@ func (tr *Generic[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
 }
 
 // Set or replace a value for a key
-func (tr *Generic[T]) Set(item T) (T, bool) {
+func (tr *BTreeG[T]) Set(item T) (T, bool) {
 	return tr.SetHint(item, nil)
 }
 
-func (tr *Generic[T]) nodeSplit(n *node[T]) (right *node[T], median T) {
+func (tr *BTreeG[T]) nodeSplit(n *node[T]) (right *node[T], median T) {
 	i := maxItems / 2
 	median = n.items[i]
 
+	const sliceItems = true
+
 	// right node
 	right = tr.newNode(n.leaf())
-	right.items = make([]T, len(n.items[i+1:]), maxItems/2)
-	copy(right.items, n.items[i+1:])
-	if !n.leaf() {
-		*right.children =
-			make([]*node[T], len((*n.children)[i+1:]), maxItems+1)
-		copy(*right.children, (*n.children)[i+1:])
+	if sliceItems {
+		right.items = n.items[i+1:]
+		if !n.leaf() {
+			*right.children = (*n.children)[i+1:]
+		}
+	} else {
+		right.items = make([]T, len(n.items[i+1:]), maxItems/2)
+		copy(right.items, n.items[i+1:])
+		if !n.leaf() {
+			*right.children =
+				make([]*node[T], len((*n.children)[i+1:]), maxItems+1)
+			copy(*right.children, (*n.children)[i+1:])
+		}
 	}
 	right.updateCount()
 
 	// left node
-	for j := i; j < len(n.items); j++ {
-		n.items[j] = tr.empty
-	}
-	if !n.leaf() {
-		for j := i + 1; j < len((*n.children)); j++ {
-			(*n.children)[j] = nil
+	if sliceItems {
+		n.items[i] = tr.empty
+		n.items = n.items[:i:i]
+		if !n.leaf() {
+			*n.children = (*n.children)[: i+1 : i+1]
+		}
+	} else {
+		for j := i; j < len(n.items); j++ {
+			n.items[j] = tr.empty
+		}
+		if !n.leaf() {
+			for j := i + 1; j < len((*n.children)); j++ {
+				(*n.children)[j] = nil
+			}
+		}
+		n.items = n.items[:i]
+		if !n.leaf() {
+			*n.children = (*n.children)[:i+1]
 		}
 	}
-	left := n
-	left.items = n.items[:i]
-	if !n.leaf() {
-		*left.children = (*n.children)[:i+1]
-	}
-	left.updateCount()
+	n.updateCount()
 
-	*n = *left
 	return right, median
 }
 
@@ -264,7 +278,7 @@ func (n *node[T]) updateCount() {
 // called outside of heavy copy-on-write situations. Marking it "noinline"
 // allows for the parent cowLoad to be inlined.
 // go:noinline
-func (tr *Generic[T]) copy(n *node[T]) *node[T] {
+func (tr *BTreeG[T]) copy(n *node[T]) *node[T] {
 	n2 := new(node[T])
 	n2.cow = tr.cow
 	n2.count = n.count
@@ -279,14 +293,14 @@ func (tr *Generic[T]) copy(n *node[T]) *node[T] {
 }
 
 // cowLoad loads the provided node and, if needed, performs a copy-on-write.
-func (tr *Generic[T]) cowLoad(cn **node[T]) *node[T] {
+func (tr *BTreeG[T]) cowLoad(cn **node[T]) *node[T] {
 	if (*cn).cow != tr.cow {
 		*cn = tr.copy(*cn)
 	}
 	return *cn
 }
 
-func (tr *Generic[T]) nodeSet(cn **node[T], item T,
+func (tr *BTreeG[T]) nodeSet(cn **node[T], item T,
 	hint *PathHint, depth int,
 ) (prev T, replaced bool, split bool) {
 	if (*cn).cow != tr.cow {
@@ -335,7 +349,7 @@ func (tr *Generic[T]) nodeSet(cn **node[T], item T,
 	return prev, replaced, false
 }
 
-func (tr *Generic[T]) Scan(iter func(item T) bool) {
+func (tr *BTreeG[T]) Scan(iter func(item T) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -366,7 +380,7 @@ func (n *node[T]) scan(iter func(item T) bool) bool {
 }
 
 // Get a value for key
-func (tr *Generic[T]) Get(key T) (T, bool) {
+func (tr *BTreeG[T]) Get(key T) (T, bool) {
 	if tr.locks {
 		return tr.GetHint(key, nil)
 	}
@@ -389,7 +403,7 @@ func (tr *Generic[T]) Get(key T) (T, bool) {
 }
 
 // GetHint gets a value for key using a path hint
-func (tr *Generic[T]) GetHint(key T, hint *PathHint) (value T, ok bool) {
+func (tr *BTreeG[T]) GetHint(key T, hint *PathHint) (value T, ok bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -397,7 +411,7 @@ func (tr *Generic[T]) GetHint(key T, hint *PathHint) (value T, ok bool) {
 }
 
 // GetHint gets a value for key using a path hint
-func (tr *Generic[T]) getHint(key T, hint *PathHint) (T, bool) {
+func (tr *BTreeG[T]) getHint(key T, hint *PathHint) (T, bool) {
 	if tr.root == nil {
 		return tr.empty, false
 	}
@@ -417,27 +431,27 @@ func (tr *Generic[T]) getHint(key T, hint *PathHint) (T, bool) {
 }
 
 // Len returns the number of items in the tree
-func (tr *Generic[T]) Len() int {
+func (tr *BTreeG[T]) Len() int {
 	return tr.count
 }
 
 // Delete a value for a key and returns the deleted value.
 // Returns false if there was no value by that key found.
-func (tr *Generic[T]) Delete(key T) (T, bool) {
+func (tr *BTreeG[T]) Delete(key T) (T, bool) {
 	return tr.DeleteHint(key, nil)
 }
 
 // DeleteHint deletes a value for a key using a path hint and returns the
 // deleted value.
 // Returns false if there was no value by that key found.
-func (tr *Generic[T]) DeleteHint(key T, hint *PathHint) (T, bool) {
+func (tr *BTreeG[T]) DeleteHint(key T, hint *PathHint) (T, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
 	return tr.deleteHint(key, hint)
 }
 
-func (tr *Generic[T]) deleteHint(key T, hint *PathHint) (T, bool) {
+func (tr *BTreeG[T]) deleteHint(key T, hint *PathHint) (T, bool) {
 	if tr.root == nil {
 		return tr.empty, false
 	}
@@ -455,7 +469,7 @@ func (tr *Generic[T]) deleteHint(key T, hint *PathHint) (T, bool) {
 	return prev, true
 }
 
-func (tr *Generic[T]) delete(cn **node[T], max bool, key T,
+func (tr *BTreeG[T]) delete(cn **node[T], max bool, key T,
 	hint *PathHint, depth int,
 ) (T, bool) {
 	n := tr.cowLoad(cn)
@@ -507,7 +521,7 @@ func (tr *Generic[T]) delete(cn **node[T], max bool, key T,
 // nodeRebalance rebalances the child nodes following a delete operation.
 // Provide the index of the child node with the number of items that fell
 // below minItems.
-func (tr *Generic[T]) nodeRebalance(n *node[T], i int) {
+func (tr *BTreeG[T]) nodeRebalance(n *node[T], i int) {
 	if i == len(n.items) {
 		i--
 	}
@@ -590,7 +604,7 @@ func (tr *Generic[T]) nodeRebalance(n *node[T], i int) {
 // Ascend the tree within the range [pivot, last]
 // Pass nil for pivot to scan all item in ascending order
 // Return false to stop iterating
-func (tr *Generic[T]) Ascend(pivot T, iter func(item T) bool) {
+func (tr *BTreeG[T]) Ascend(pivot T, iter func(item T) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -602,7 +616,7 @@ func (tr *Generic[T]) Ascend(pivot T, iter func(item T) bool) {
 
 // The return value of this function determines whether we should keep iterating
 // upon this functions return.
-func (tr *Generic[T]) ascend(n *node[T], pivot T,
+func (tr *BTreeG[T]) ascend(n *node[T], pivot T,
 	hint *PathHint, depth int, iter func(item T) bool,
 ) bool {
 	i, found := tr.find(n, pivot, hint, depth)
@@ -630,7 +644,7 @@ func (tr *Generic[T]) ascend(n *node[T], pivot T,
 	return true
 }
 
-func (tr *Generic[T]) Reverse(iter func(item T) bool) {
+func (tr *BTreeG[T]) Reverse(iter func(item T) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -666,7 +680,7 @@ func (n *node[T]) reverse(iter func(item T) bool) bool {
 // Descend the tree within the range [pivot, first]
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
-func (tr *Generic[T]) Descend(pivot T, iter func(item T) bool) {
+func (tr *BTreeG[T]) Descend(pivot T, iter func(item T) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -676,7 +690,7 @@ func (tr *Generic[T]) Descend(pivot T, iter func(item T) bool) {
 	tr.descend(tr.root, pivot, nil, 0, iter)
 }
 
-func (tr *Generic[T]) descend(n *node[T], pivot T,
+func (tr *BTreeG[T]) descend(n *node[T], pivot T,
 	hint *PathHint, depth int, iter func(item T) bool,
 ) bool {
 	i, found := tr.find(n, pivot, hint, depth)
@@ -702,7 +716,7 @@ func (tr *Generic[T]) descend(n *node[T], pivot T,
 }
 
 // Load is for bulk loading pre-sorted items
-func (tr *Generic[T]) Load(item T) (T, bool) {
+func (tr *BTreeG[T]) Load(item T) (T, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -738,7 +752,7 @@ func (tr *Generic[T]) Load(item T) (T, bool) {
 
 // Min returns the minimum item in tree.
 // Returns nil if the treex has no items.
-func (tr *Generic[T]) Min() (T, bool) {
+func (tr *BTreeG[T]) Min() (T, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -756,7 +770,7 @@ func (tr *Generic[T]) Min() (T, bool) {
 
 // Max returns the maximum item in tree.
 // Returns nil if the tree has no items.
-func (tr *Generic[T]) Max() (T, bool) {
+func (tr *BTreeG[T]) Max() (T, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -774,7 +788,7 @@ func (tr *Generic[T]) Max() (T, bool) {
 
 // PopMin removes the minimum item in tree and returns it.
 // Returns nil if the tree has no items.
-func (tr *Generic[T]) PopMin() (T, bool) {
+func (tr *BTreeG[T]) PopMin() (T, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -815,7 +829,7 @@ func (tr *Generic[T]) PopMin() (T, bool) {
 
 // PopMax removes the maximum item in tree and returns it.
 // Returns nil if the tree has no items.
-func (tr *Generic[T]) PopMax() (T, bool) {
+func (tr *BTreeG[T]) PopMax() (T, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -855,7 +869,7 @@ func (tr *Generic[T]) PopMax() (T, bool) {
 
 // GetAt returns the value at index.
 // Return nil if the tree is empty or the index is out of bounds.
-func (tr *Generic[T]) GetAt(index int) (T, bool) {
+func (tr *BTreeG[T]) GetAt(index int) (T, bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -882,7 +896,7 @@ func (tr *Generic[T]) GetAt(index int) (T, bool) {
 
 // DeleteAt deletes the item at index.
 // Return nil if the tree is empty or the index is out of bounds.
-func (tr *Generic[T]) DeleteAt(index int) (T, bool) {
+func (tr *BTreeG[T]) DeleteAt(index int) (T, bool) {
 	if tr.lock() {
 		defer tr.unlock()
 	}
@@ -944,7 +958,7 @@ outer:
 
 // Height returns the height of the tree.
 // Returns zero if tree has no items.
-func (tr *Generic[T]) Height() int {
+func (tr *BTreeG[T]) Height() int {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -964,7 +978,7 @@ func (tr *Generic[T]) Height() int {
 
 // Walk iterates over all items in tree, in order.
 // The items param will contain one or more items.
-func (tr *Generic[T]) Walk(iter func(item []T) bool) {
+func (tr *BTreeG[T]) Walk(iter func(item []T) bool) {
 	if tr.rlock() {
 		defer tr.runlock()
 	}
@@ -992,43 +1006,43 @@ func (n *node[T]) walk(iter func(item []T) bool) bool {
 
 // Copy the tree. This is a copy-on-write operation and is very fast because
 // it only performs a shadowed copy.
-func (tr *Generic[T]) Copy() *Generic[T] {
+func (tr *BTreeG[T]) Copy() *BTreeG[T] {
 	if tr.lock() {
 		defer tr.unlock()
 	}
-	tr.cow = new(cow)
-	tr2 := new(Generic[T])
+	tr.cow = atomic.AddUint64(&gcow, 1)
+	tr2 := new(BTreeG[T])
 	*tr2 = *tr
 	tr2.mu = new(sync.RWMutex)
-	tr2.cow = new(cow)
+	tr2.cow = atomic.AddUint64(&gcow, 1)
 	return tr2
 }
 
-func (tr *Generic[T]) lock() bool {
+func (tr *BTreeG[T]) lock() bool {
 	if tr.locks {
 		tr.mu.Lock()
 	}
 	return tr.locks
 }
 
-func (tr *Generic[T]) unlock() {
+func (tr *BTreeG[T]) unlock() {
 	tr.mu.Unlock()
 }
 
-func (tr *Generic[T]) rlock() bool {
+func (tr *BTreeG[T]) rlock() bool {
 	if tr.locks {
 		tr.mu.RLock()
 	}
 	return tr.locks
 }
 
-func (tr *Generic[T]) runlock() {
+func (tr *BTreeG[T]) runlock() {
 	tr.mu.RUnlock()
 }
 
 // Iter represents an iterator
 type GenericIter[T any] struct {
-	tr      *Generic[T]
+	tr      *BTreeG[T]
 	locked  bool
 	seeked  bool
 	atstart bool
@@ -1044,7 +1058,7 @@ type genericIterStackItem[T any] struct {
 
 // Iter returns a read-only iterator.
 // The Release method must be called finished with iterator.
-func (tr *Generic[T]) Iter() GenericIter[T] {
+func (tr *BTreeG[T]) Iter() GenericIter[T] {
 	var iter GenericIter[T]
 	iter.tr = tr
 	iter.locked = tr.rlock()
@@ -1244,7 +1258,7 @@ func (iter *GenericIter[T]) Item() T {
 }
 
 // Items returns all the items in order.
-func (tr *Generic[T]) Items() []T {
+func (tr *BTreeG[T]) Items() []T {
 	items := make([]T, 0, tr.Len())
 	if tr.root != nil {
 		items = tr.root.aitems(items)
@@ -1261,4 +1275,26 @@ func (n *node[T]) aitems(items []T) []T {
 		items = append(items, n.items[i])
 	}
 	return (*n.children)[len(*n.children)-1].aitems(items)
+}
+
+// Generic BTree
+// Deprecated: use BTreeG
+type Generic[T any] struct {
+	*BTreeG[T]
+}
+
+// NewGeneric returns a generic BTree
+// Deprecated: use NewBTreeG
+func NewGeneric[T any](less func(a, b T) bool) *Generic[T] {
+	return &Generic[T]{NewBTreeGOptions(less, Options{})}
+}
+
+// NewGenericOptions returns a generic BTree
+// Deprecated: use NewBTreeGOptions
+func NewGenericOptions[T any](less func(a, b T) bool, opts Options) *Generic[T] {
+	return &Generic[T]{NewBTreeGOptions(less, opts)}
+}
+
+func (tr *Generic[T]) Copy() *Generic[T] {
+	return &Generic[T]{tr.BTreeG.Copy()}
 }
