@@ -4,7 +4,6 @@
 package btree
 
 import (
-	"sort"
 	"sync"
 	"sync/atomic"
 )
@@ -80,13 +79,19 @@ func (n *node[T]) leaf() bool {
 }
 
 func (tr *BTreeG[T]) bsearch(n *node[T], key T) (index int, found bool) {
-	i := sort.Search(len(n.items), func(i int) bool {
-		return tr.less(key, n.items[i])
-	})
-	if i > 0 && !tr.less(n.items[i-1], key) {
-		return i - 1, true
+	low, high := 0, len(n.items)
+	for low < high {
+		h := int(uint(low+high) >> 1)
+		if !tr.less(key, n.items[h]) {
+			low = h + 1
+		} else {
+			high = h
+		}
 	}
-	return i, false
+	if low > 0 && !tr.less(n.items[low-1], key) {
+		return low - 1, true
+	}
+	return low, false
 }
 
 func (tr *BTreeG[T]) find(n *node[T], key T, hint *PathHint, depth int,
@@ -389,11 +394,9 @@ func (tr *BTreeG[T]) Get(key T) (T, bool) {
 	}
 	n := tr.root
 	for {
-		i := sort.Search(len(n.items), func(i int) bool {
-			return tr.less(key, n.items[i])
-		})
-		if i > 0 && !tr.less(n.items[i-1], key) {
-			return n.items[i-1], true
+		i, found := tr.bsearch(n, key)
+		if found {
+			return n.items[i], true
 		}
 		if n.children == nil {
 			return tr.empty, false
