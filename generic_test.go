@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-var seed int64
-
 func init() {
 	seed, err := strconv.ParseInt(os.Getenv("SEED"), 10, 64)
 	if err != nil {
@@ -36,16 +34,11 @@ func testLess(a, b testKind) bool {
 // btree_test.go file. If you choose not use include the btree_test.go file in
 // your project then these functions may be omitted.
 
-// testGenericSeed can be used to generate a Generic random seed for testing.
-// Returning false will use time.Now().UnixNano()
-func testGenericSeed() (seed int64, ok bool) {
-	return 0, false
-}
-
 // testMakeItem must return a valid item for testing.
 // It's required that the returned item maintains equal order as the
 // provided int, such that:
-//    testMakeItem(0) < testMakeItem(1) < testMakeItem(2) < testMakeItem(10)
+//
+//	testMakeItem(0) < testMakeItem(1) < testMakeItem(2) < testMakeItem(10)
 func testMakeItem(x int) (item testKind) {
 	return x
 }
@@ -1186,7 +1179,9 @@ func (tr *BTreeG[T]) sanenilsnode(n *node[T]) bool {
 }
 
 // sanenils checks that all the slots in the item slice that are not used,
-//   n.items[len(n.items):cap(n.items):cap(n.items)]
+//
+//	n.items[len(n.items):cap(n.items):cap(n.items)]
+//
 // are equal to the empty value of the kind.
 func (tr *BTreeG[T]) sanenils() bool {
 	if tr.root != nil {
@@ -1312,6 +1307,7 @@ func TestGenericIterSeek(t *testing.T) {
 		tr.Set(i * 2)
 		all = append(all, i)
 	}
+	_ = all
 	{
 		iter := tr.Iter()
 		var vals []int

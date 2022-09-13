@@ -1054,3 +1054,9 @@ func (n *mapNode[K, V]) keyValues(keys []K, values []V) ([]K, []V) {
 	}
 	return (*n.children)[len(*n.children)-1].keyValues(keys, values)
 }
+
+// Clear will delete all items.
+func (tr *Map[K, V]) Clear() {
+	tr.count = 0
+	tr.root = nil
+}

@@ -1280,6 +1280,15 @@ func (n *node[T]) aitems(items []T) []T {
 	return (*n.children)[len(*n.children)-1].aitems(items)
 }
 
+// Clear will delete all items.
+func (tr *BTreeG[T]) Clear() {
+	if tr.lock() {
+		defer tr.unlock()
+	}
+	tr.root = nil
+	tr.count = 0
+}
+
 // Generic BTree
 // Deprecated: use BTreeG
 type Generic[T any] struct {

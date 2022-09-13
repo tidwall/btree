@@ -219,6 +219,11 @@ func (tr *BTree) Copy() *BTree {
 	return &BTree{base: tr.base.Copy()}
 }
 
+// Clear will delete all items.
+func (tr *BTree) Clear() {
+	tr.base.Clear()
+}
+
 type Iter struct {
 	base GenericIter[any]
 }

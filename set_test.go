@@ -130,6 +130,20 @@ func TestSet(t *testing.T) {
 	assert(tr.base.lt(2, 10))
 }
 
+func TestSetClear(t *testing.T) {
+	var tr Set[int]
+	for i := 0; i < 100; i++ {
+		tr.Insert(i)
+	}
+	assert(tr.Len() == 100)
+	tr.Clear()
+	assert(tr.Len() == 0)
+	for i := 0; i < 100; i++ {
+		tr.Insert(i)
+	}
+	assert(tr.Len() == 100)
+}
+
 func TestSetIter(t *testing.T) {
 	N := 100_000
 	lt := func(a, b int) bool { return a < b }

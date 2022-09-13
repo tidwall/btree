@@ -12,10 +12,6 @@ import (
 
 type testMapKind = int
 
-func testMapMapLess(a, b testMapKind) bool {
-	return a < b
-}
-
 func testMapMakeItem(x int) (item testMapKind) {
 	return x
 }
@@ -1057,7 +1053,9 @@ func (tr *Map[K, V]) sanenilsnode(n *mapNode[K, V]) bool {
 }
 
 // sanenils checks that all the slots in the item slice that are not used,
-//   n.items[len(n.items):cap(n.items):cap(n.items)]
+//
+//	n.items[len(n.items):cap(n.items):cap(n.items)]
+//
 // are equal to the empty value of the kind.
 func (tr *Map[K, V]) sanenils() bool {
 	if tr.root != nil {
@@ -1177,6 +1175,7 @@ func TestMapIterSeek(t *testing.T) {
 		tr.Set(i*2, struct{}{})
 		all = append(all, i)
 	}
+	_ = all
 	{
 		iter := tr.Iter()
 		var vals []int

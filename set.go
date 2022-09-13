@@ -166,3 +166,8 @@ func (iter *SetIter[K]) Key() K {
 func (tr *Set[K]) Keys() []K {
 	return tr.base.Keys()
 }
+
+// Clear will delete all items.
+func (tr *Set[K]) Clear() {
+	tr.base.Clear()
+}
