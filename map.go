@@ -190,7 +190,7 @@ func (tr *Map[K, V]) nodeSet(pn **mapNode[K, V], item mapPair[K, V],
 	i, found := tr.bsearch(n, item.key)
 	if found {
 		prev = n.items[i].value
-		n.items[i].value = item.value
+		n.items[i] = item
 		return prev, true, false
 	}
 	if n.leaf() {
