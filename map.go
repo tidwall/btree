@@ -24,6 +24,14 @@ type Map[K ordered, V any] struct {
 	root  *mapNode[K, V]
 	count int
 	empty mapPair[K, V]
+	min   int // min items
+	max   int // max items
+}
+
+func NewMap[K ordered, V any](degree int) *Map[K, V] {
+	m := new(Map[K, V])
+	m.init(degree)
+	return m
 }
 
 type mapNode[K ordered, V any] struct {
@@ -45,7 +53,7 @@ func (tr *Map[K, V]) copy(n *mapNode[K, V]) *mapNode[K, V] {
 	copy(n2.items, n.items)
 	if !n.leaf() {
 		n2.children = new([]*mapNode[K, V])
-		*n2.children = make([]*mapNode[K, V], len(*n.children), maxItems+1)
+		*n2.children = make([]*mapNode[K, V], len(*n.children), tr.max+1)
 		copy(*n2.children, *n.children)
 	}
 	return n2
@@ -97,10 +105,18 @@ func (tr *Map[K, V]) bsearch(n *mapNode[K, V], key K) (index int, found bool) {
 	return low, false
 }
 
+func (tr *Map[K, V]) init(degree int) {
+	if tr.min != 0 {
+		return
+	}
+	tr.min, tr.max = degreeToMinMax(degree)
+}
+
 // Set or replace a value for a key
 func (tr *Map[K, V]) Set(key K, value V) (V, bool) {
 	item := mapPair[K, V]{key: key, value: value}
 	if tr.root == nil {
+		tr.init(0)
 		tr.root = tr.newNode(true)
 		tr.root.items = append([]mapPair[K, V]{}, item)
 		tr.root.count = 1
@@ -112,7 +128,7 @@ func (tr *Map[K, V]) Set(key K, value V) (V, bool) {
 		left := tr.root
 		right, median := tr.nodeSplit(left)
 		tr.root = tr.newNode(false)
-		*tr.root.children = make([]*mapNode[K, V], 0, maxItems+1)
+		*tr.root.children = make([]*mapNode[K, V], 0, tr.max+1)
 		*tr.root.children = append([]*mapNode[K, V]{}, left, right)
 		tr.root.items = append([]mapPair[K, V]{}, median)
 		tr.root.updateCount()
@@ -127,7 +143,7 @@ func (tr *Map[K, V]) Set(key K, value V) (V, bool) {
 
 func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V],
 ) (right *mapNode[K, V], median mapPair[K, V]) {
-	i := maxItems / 2
+	i := tr.max / 2
 	median = n.items[i]
 
 	const sliceItems = true
@@ -140,11 +156,11 @@ func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V],
 			*right.children = (*n.children)[i+1:]
 		}
 	} else {
-		right.items = make([]mapPair[K, V], len(n.items[i+1:]), maxItems/2)
+		right.items = make([]mapPair[K, V], len(n.items[i+1:]), tr.max/2)
 		copy(right.items, n.items[i+1:])
 		if !n.leaf() {
 			*right.children = make([]*mapNode[K, V],
-				len((*n.children)[i+1:]), maxItems+1)
+				len((*n.children)[i+1:]), tr.max+1)
 			copy(*right.children, (*n.children)[i+1:])
 		}
 	}
@@ -194,7 +210,7 @@ func (tr *Map[K, V]) nodeSet(pn **mapNode[K, V], item mapPair[K, V],
 		return prev, true, false
 	}
 	if n.leaf() {
-		if len(n.items) == maxItems {
+		if len(n.items) == tr.max {
 			return tr.empty.value, false, true
 		}
 		n.items = append(n.items, tr.empty)
@@ -205,7 +221,7 @@ func (tr *Map[K, V]) nodeSet(pn **mapNode[K, V], item mapPair[K, V],
 	}
 	prev, replaced, split = tr.nodeSet(&(*n.children)[i], item)
 	if split {
-		if len(n.items) == maxItems {
+		if len(n.items) == tr.max {
 			return tr.empty.value, false, true
 		}
 		right, median := tr.nodeSplit((*n.children)[i])
@@ -335,7 +351,7 @@ func (tr *Map[K, V]) delete(pn **mapNode[K, V], max bool, key K,
 		return tr.empty, false
 	}
 	n.count--
-	if len((*n.children)[i].items) < minItems {
+	if len((*n.children)[i].items) < tr.min {
 		tr.nodeRebalance(n, i)
 	}
 	return prev, true
@@ -353,7 +369,7 @@ func (tr *Map[K, V]) nodeRebalance(n *mapNode[K, V], i int) {
 	left := tr.cowLoad(&(*n.children)[i])
 	right := tr.cowLoad(&(*n.children)[i+1])
 
-	if len(left.items)+len(right.items) < maxItems {
+	if len(left.items)+len(right.items) < tr.max {
 		// Merges the left and right children nodes together as a single node
 		// that includes (left,item,right), and places the contents into the
 		// existing left node. Delete the right node altogether and move the
@@ -539,7 +555,7 @@ func (tr *Map[K, V]) Load(key K, value V) (V, bool) {
 	for {
 		n.count++ // optimistically update counts
 		if n.leaf() {
-			if len(n.items) < maxItems {
+			if len(n.items) < tr.max {
 				if n.items[len(n.items)-1].key < item.key {
 					n.items = append(n.items, item)
 					tr.count++
@@ -606,7 +622,7 @@ func (tr *Map[K, V]) PopMin() (K, V, bool) {
 		n.count-- // optimistically update counts
 		if n.leaf() {
 			item = n.items[0]
-			if len(n.items) == minItems {
+			if len(n.items) == tr.min {
 				break
 			}
 			copy(n.items[:], n.items[1:])
@@ -648,7 +664,7 @@ func (tr *Map[K, V]) PopMax() (K, V, bool) {
 		n.count-- // optimistically update counts
 		if n.leaf() {
 			item = n.items[len(n.items)-1]
-			if len(n.items) == minItems {
+			if len(n.items) == tr.min {
 				break
 			}
 			n.items[len(n.items)-1] = tr.empty
@@ -717,7 +733,7 @@ outer:
 		if n.leaf() {
 			// the index is the item position
 			item = n.items[index]
-			if len(n.items) == minItems {
+			if len(n.items) == tr.min {
 				path = append(path, uint8(index))
 				break outer
 			}

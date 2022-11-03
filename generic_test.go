@@ -119,7 +119,7 @@ func TestGenericDescend(t *testing.T) {
 		}
 		var count int
 		tr.Descend(key, func(item testKind) bool {
-			if count == (i+1)%maxItems {
+			if count == (i+1)%tr.max {
 				return false
 			}
 			count++
@@ -175,7 +175,7 @@ func TestGenericAscend(t *testing.T) {
 		}
 		var count int
 		tr.Ascend(key, func(item testKind) bool {
-			if count == (i+1)%maxItems {
+			if count == (i+1)%tr.max {
 				return false
 			}
 			count++
@@ -1114,12 +1114,12 @@ func (n *node[T]) deepcount() int {
 
 func (tr *BTreeG[T]) nodesaneprops(n *node[T], height int) bool {
 	if height == 1 {
-		if len(n.items) < 1 || len(n.items) > maxItems {
+		if len(n.items) < 1 || len(n.items) > tr.max {
 			println(len(n.items) < 1)
 			return false
 		}
 	} else {
-		if len(n.items) < minItems || len(n.items) > maxItems {
+		if len(n.items) < tr.min || len(n.items) > tr.max {
 			println(2)
 			return false
 		}
