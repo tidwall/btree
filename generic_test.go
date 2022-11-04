@@ -846,15 +846,15 @@ func TestGenericCopy(t *testing.T) {
 	for i := 0; i < len(items); i++ {
 		tr.Set(items[i])
 	}
-	var wait int32
+	var wait atomic.Int32
 	var testCopyDeep func(tr *BTreeG[testKind], parent bool)
 
 	testCopyDeep = func(tr *BTreeG[testKind], parent bool) {
-		defer func() { atomic.AddInt32(&wait, -1) }()
+		defer func() { wait.Add(-1) }()
 		if parent {
 			// 2 grandchildren
 			for i := 0; i < 2; i++ {
-				atomic.AddInt32(&wait, 1)
+				wait.Add(1)
 				go testCopyDeep(tr.Copy(), false)
 			}
 		}
@@ -938,11 +938,11 @@ func TestGenericCopy(t *testing.T) {
 
 	// 10 children
 	for i := 0; i < 10; i++ {
-		atomic.AddInt32(&wait, 1)
+		wait.Add(1)
 		go testCopyDeep(tr.Copy(), true)
 	}
 
-	for atomic.LoadInt32(&wait) > 0 {
+	for wait.Load() > 0 {
 		tr.sane()
 		if tr.Len() != len(items) {
 			panic("!")

@@ -38,7 +38,7 @@ type node[T any] struct {
 	children *[]*node[T]
 }
 
-var gcow uint64
+var gcow atomic.Uint64
 
 // PathHint is a utility type used with the *Hint() functions. Hints provide
 // faster operations for clustered keys.
@@ -60,7 +60,7 @@ func NewBTreeG[T any](less func(a, b T) bool) *BTreeG[T] {
 
 func NewBTreeGOptions[T any](less func(a, b T) bool, opts Options) *BTreeG[T] {
 	tr := new(BTreeG[T])
-	tr.cow = atomic.AddUint64(&gcow, 1)
+	tr.cow = gcow.Add(1)
 	tr.mu = new(sync.RWMutex)
 	tr.less = less
 	tr.locks = !opts.NoLocks
@@ -1022,11 +1022,11 @@ func (tr *BTreeG[T]) Copy() *BTreeG[T] {
 	if tr.lock() {
 		defer tr.unlock()
 	}
-	tr.cow = atomic.AddUint64(&gcow, 1)
+	tr.cow = gcow.Add(1)
 	tr2 := new(BTreeG[T])
 	*tr2 = *tr
 	tr2.mu = new(sync.RWMutex)
-	tr2.cow = atomic.AddUint64(&gcow, 1)
+	tr2.cow = gcow.Add(1)
 	return tr2
 }
 

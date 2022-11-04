@@ -3,8 +3,6 @@
 // license that can be found in the LICENSE file.
 package btree
 
-import "sync/atomic"
-
 type ordered interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
@@ -70,8 +68,8 @@ func (tr *Map[K, V]) cowLoad(cn **mapNode[K, V]) *mapNode[K, V] {
 func (tr *Map[K, V]) Copy() *Map[K, V] {
 	tr2 := new(Map[K, V])
 	*tr2 = *tr
-	tr2.cow = atomic.AddUint64(&gcow, 1)
-	tr.cow = atomic.AddUint64(&gcow, 1)
+	tr2.cow = gcow.Add(1)
+	tr.cow = gcow.Add(1)
 	return tr2
 }
 
