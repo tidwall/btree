@@ -10,7 +10,7 @@ import (
 
 func degreeToMinMax(deg int) (min, max int) {
 	if deg <= 0 {
-		deg = 32 // default to 32
+		deg = 128
 	} else if deg == 1 {
 		deg = 2 // must have at least 2
 	}
@@ -49,8 +49,15 @@ type PathHint struct {
 
 // Options for passing to New when creating a new BTree.
 type Options struct {
+	// Degree is used to define how many items and children each internal node
+	// can contain before it must branch. For example, a degree of 2 will
+	// create a 2-3-4 tree, where each node may contains 1-3 items and
+	// 2-4 children. See https://en.wikipedia.org/wiki/2–3–4_tree.
+	// Default is 128
+	Degree int
+	// NoLocks will disable locking. Otherwide a sync.RWMutex is used to
+	// ensure all operations are safe across multiple goroutines.
 	NoLocks bool
-	Degree  int
 }
 
 // New returns a new BTree
