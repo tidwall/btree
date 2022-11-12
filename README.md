@@ -438,6 +438,12 @@ func main() {
 }
 ```
 
+## Testing
+
+```sh
+go test -v -coverprofile coverage.out && go tool cover -html coverage.out -o coverage.html
+```
+
 ## Performance
 
 See [tidwall/btree-benchmark](https://github.com/tidwall/btree-benchmark) for benchmark numbers.
