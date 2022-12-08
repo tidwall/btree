@@ -20,6 +20,7 @@ func New(less func(a, b any) bool) *BTree {
 //
 // This is useful for when you do not need the BTree to manage the locking,
 // but would rather do it yourself.
+//
 // Deprecated: use NewOptions
 func NewNonConcurrent(less func(a, b any) bool) *BTree {
 	if less == nil {
