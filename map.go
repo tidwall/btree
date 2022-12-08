@@ -111,6 +111,7 @@ func (tr *Map[K, V]) init(degree int) {
 }
 
 // Set or replace a value for a key
+// returns (prior value at key, did prior value exist)
 func (tr *Map[K, V]) Set(key K, value V) (V, bool) {
 	item := mapPair[K, V]{key: key, value: value}
 	if tr.root == nil {
@@ -265,6 +266,7 @@ func (n *mapNode[K, V]) scan(iter func(key K, value V) bool) bool {
 }
 
 // Get a value for key
+// Returns value, found
 func (tr *Map[K, V]) Get(key K) (V, bool) {
 	if tr.root == nil {
 		return tr.empty.value, false
