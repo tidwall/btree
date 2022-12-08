@@ -65,16 +65,34 @@ func (tr *BTree) SetHint(item any, hint *PathHint) (prev any) {
 // Get a value for key.
 // Returns nil if the key was not found.
 func (tr *BTree) Get(key any) any {
-	return tr.GetHint(key, nil)
+	return tr.getHintMut(key, nil, false)
+}
+
+func (tr *BTree) GetMut(key any) any {
+	return tr.getHintMut(key, nil, true)
+}
+
+func (tr *BTree) GetHint(key any, hint *PathHint) any {
+	return tr.getHintMut(key, hint, false)
+}
+
+func (tr *BTree) GetHintMut(key any, hint *PathHint) any {
+	return tr.getHintMut(key, hint, true)
 }
 
 // GetHint gets a value for key using a path hint.
 // Returns nil if the item was not found.
-func (tr *BTree) GetHint(key any, hint *PathHint) (value any) {
+func (tr *BTree) getHintMut(key any, hint *PathHint, mut bool) (value any) {
 	if key == nil {
 		return nil
 	}
-	v, ok := tr.base.GetHint(key, hint)
+	var v any
+	var ok bool
+	if mut {
+		v, ok = tr.base.GetHintMut(key, hint)
+	} else {
+		v, ok = tr.base.GetHint(key, hint)
+	}
 	if !ok {
 		return nil
 	}
@@ -116,6 +134,14 @@ func (tr *BTree) Ascend(pivot any, iter func(item any) bool) {
 	}
 }
 
+func (tr *BTree) AscendMut(pivot any, iter func(item any) bool) {
+	if pivot == nil {
+		tr.base.ScanMut(iter)
+	} else {
+		tr.base.AscendMut(pivot, iter)
+	}
+}
+
 // Descend the tree within the range [pivot, first]
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
@@ -124,6 +150,14 @@ func (tr *BTree) Descend(pivot any, iter func(item any) bool) {
 		tr.base.Reverse(iter)
 	} else {
 		tr.base.Descend(pivot, iter)
+	}
+}
+
+func (tr *BTree) DescendMut(pivot any, iter func(item any) bool) {
+	if pivot == nil {
+		tr.base.ReverseMut(iter)
+	} else {
+		tr.base.DescendMut(pivot, iter)
 	}
 }
 
@@ -151,9 +185,25 @@ func (tr *BTree) Min() any {
 	return v
 }
 
+func (tr *BTree) MinMut() any {
+	v, ok := tr.base.MinMut()
+	if !ok {
+		return nil
+	}
+	return v
+}
+
 // Max returns the maximum item in tree.
 // Returns nil if the tree has no items.
 func (tr *BTree) Max() any {
+	v, ok := tr.base.Max()
+	if !ok {
+		return nil
+	}
+	return v
+}
+
+func (tr *BTree) MaxMut() any {
 	v, ok := tr.base.Max()
 	if !ok {
 		return nil
@@ -191,6 +241,14 @@ func (tr *BTree) GetAt(index int) any {
 	return v
 }
 
+func (tr *BTree) GetAtMut(index int) any {
+	v, ok := tr.base.GetAtMut(index)
+	if !ok {
+		return nil
+	}
+	return v
+}
+
 // DeleteAt deletes the item at index.
 // Return nil if the tree is empty or the index is out of bounds.
 func (tr *BTree) DeleteAt(index int) any {
@@ -216,10 +274,21 @@ func (tr *BTree) Walk(iter func(items []any)) {
 	})
 }
 
+func (tr *BTree) WalkMut(iter func(items []any)) {
+	tr.base.WalkMut(func(items []any) bool {
+		iter(items)
+		return true
+	})
+}
+
 // Copy the tree. This is a copy-on-write operation and is very fast because
 // it only performs a shadowed copy.
 func (tr *BTree) Copy() *BTree {
 	return &BTree{base: tr.base.Copy()}
+}
+
+func (tr *BTree) IsoCopy() *BTree {
+	return &BTree{base: tr.base.IsoCopy()}
 }
 
 // Clear will delete all items.
@@ -227,14 +296,19 @@ func (tr *BTree) Clear() {
 	tr.base.Clear()
 }
 
+// Iter is an iterator for
 type Iter struct {
-	base GenericIter[any]
+	base IterG[any]
 }
 
 // Iter returns a read-only iterator.
 // The Release method must be called finished with iterator.
 func (tr *BTree) Iter() Iter {
 	return Iter{tr.base.Iter()}
+}
+
+func (tr *BTree) IterMut() Iter {
+	return Iter{tr.base.IterMut()}
 }
 
 // Seek to item greater-or-equal-to key.
