@@ -90,16 +90,6 @@ func (tr *BTreeG[T]) ScanMut(iter func(item T) bool) {
 	tr.scan(iter, true)
 }
 
-func (tr *BTreeG[T]) scan(iter func(item T) bool, mut bool) {
-	if tr.lock(mut) {
-		defer tr.unlock(mut)
-	}
-	if tr.root == nil {
-		return
-	}
-	tr.nodeScan(&tr.root, iter, mut)
-}
-
 // Get a value for key
 func (tr *BTreeG[T]) Get(key T) (T, bool) {
 	return tr.getHint(key, nil, false)
@@ -154,15 +144,6 @@ func (tr *BTreeG[T]) Reverse(iter func(item T) bool) {
 func (tr *BTreeG[T]) ReverseMut(iter func(item T) bool) {
 	tr.reverse(iter, true)
 }
-func (tr *BTreeG[T]) reverse(iter func(item T) bool, mut bool) {
-	if tr.lock(mut) {
-		defer tr.unlock(mut)
-	}
-	if tr.root == nil {
-		return
-	}
-	tr.nodeReverse(&tr.root, iter, mut)
-}
 
 // Descend the tree within the range [pivot, first]
 // Pass nil for pivot to scan all item in descending order
@@ -172,15 +153,6 @@ func (tr *BTreeG[T]) Descend(pivot T, iter func(item T) bool) {
 }
 func (tr *BTreeG[T]) DescendMut(pivot T, iter func(item T) bool) {
 	tr.descend(pivot, iter, true)
-}
-func (tr *BTreeG[T]) descend(pivot T, iter func(item T) bool, mut bool) {
-	if tr.lock(mut) {
-		defer tr.unlock(mut)
-	}
-	if tr.root == nil {
-		return
-	}
-	tr.nodeDescend(&tr.root, pivot, nil, 0, iter, mut)
 }
 
 // Load is for bulk loading pre-sorted items
@@ -415,6 +387,7 @@ func (tr *BTreeG[T]) Height() int {
 func (tr *BTreeG[T]) Walk(iter func(item []T) bool) {
 	tr.walk(iter, false)
 }
+
 func (tr *BTreeG[T]) WalkMut(iter func(item []T) bool) {
 	tr.walk(iter, true)
 }

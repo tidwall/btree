@@ -263,6 +263,16 @@ func (tr *BTreeG[T]) nodeSet(cn **node[T], item T,
 	return prev, replaced, false
 }
 
+func (tr *BTreeG[T]) scan(iter func(item T) bool, mut bool) {
+	if tr.lock(mut) {
+		defer tr.unlock(mut)
+	}
+	if tr.root == nil {
+		return
+	}
+	tr.nodeScan(&tr.root, iter, mut)
+}
+
 func (tr *BTreeG[T]) nodeScan(cn **node[T], iter func(item T) bool, mut bool,
 ) bool {
 	n := tr.isoLoad(cn, mut)
@@ -500,6 +510,16 @@ func (tr *BTreeG[T]) nodeAscend(cn **node[T], pivot T, hint *PathHint,
 	return true
 }
 
+func (tr *BTreeG[T]) reverse(iter func(item T) bool, mut bool) {
+	if tr.lock(mut) {
+		defer tr.unlock(mut)
+	}
+	if tr.root == nil {
+		return
+	}
+	tr.nodeReverse(&tr.root, iter, mut)
+}
+
 func (tr *BTreeG[T]) nodeReverse(cn **node[T], iter func(item T) bool, mut bool,
 ) bool {
 	n := tr.isoLoad(cn, mut)
@@ -523,6 +543,16 @@ func (tr *BTreeG[T]) nodeReverse(cn **node[T], iter func(item T) bool, mut bool,
 		}
 	}
 	return true
+}
+
+func (tr *BTreeG[T]) descend(pivot T, iter func(item T) bool, mut bool) {
+	if tr.lock(mut) {
+		defer tr.unlock(mut)
+	}
+	if tr.root == nil {
+		return
+	}
+	tr.nodeDescend(&tr.root, pivot, nil, 0, iter, mut)
 }
 
 func (tr *BTreeG[T]) nodeDescend(cn **node[T], pivot T, hint *PathHint,
