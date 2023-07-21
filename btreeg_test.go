@@ -1343,3 +1343,26 @@ func TestGenericIterSeekPrefix(t *testing.T) {
 		iter.Release()
 	}
 }
+
+func TestGenericPos(t *testing.T) {
+	tr := NewBTreeG(func(a, b int) bool {
+		return a < b
+	})
+	count := 10_000
+	for i := 0; i < count; i++ {
+		tr.Set(i * 2)
+	}
+	iter := tr.Iter()
+	lastPos := iter.Pos()
+	assert(lastPos == -1)
+	iter.Release()
+	for i := 0; i < count; i++ {
+		iter = tr.Iter()
+		ret := iter.Seek(i*2 - 1)
+		assert(ret == true)
+		pos := iter.Pos()
+		assert(pos-lastPos == 1)
+		lastPos = pos
+		iter.Release()
+	}
+}
