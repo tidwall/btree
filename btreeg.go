@@ -1327,6 +1327,8 @@ func (iter *IterG[T]) Item() T {
 
 // Pos returns the position of the current iterator item. Returns -1
 // if the tree is empty or the iterator is at the beginning of the tree.
+// Overall, the complexity will be O(log N⋅M) where stack height will
+// follow the height of the btree, which is log N, and M as the degree.
 func (iter *IterG[T]) Pos() int {
 	if iter.tr == nil {
 		return -1
