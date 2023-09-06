@@ -146,6 +146,66 @@ func TestGenericDescend(t *testing.T) {
 	}
 }
 
+func TestGenericDescendHint(t *testing.T) {
+	tr := testNewBTree()
+	var count int
+	var hint PathHint
+	tr.DescendHint(testMakeItem(rand.Int()), func(item testKind) bool {
+		count++
+		return true
+	}, &hint)
+	if count > 0 {
+		t.Fatalf("expected 0, got %v", count)
+	}
+	var keys []testKind
+	for i := 0; i < 1000; i += 10 {
+		keys = append(keys, testMakeItem(i))
+		tr.Set(keys[len(keys)-1])
+	}
+	var exp []testKind
+	tr.Reverse(func(item testKind) bool {
+		exp = append(exp, item)
+		return true
+	})
+	for i := 999; i >= 0; i-- {
+		key := testMakeItem(i)
+		var all []testKind
+		tr.DescendHint(key, func(item testKind) bool {
+			all = append(all, item)
+			return true
+		}, &hint)
+		for len(exp) > 0 && tr.Less(key, exp[0]) {
+			exp = exp[1:]
+		}
+		var count int
+		tr.DescendHint(key, func(item testKind) bool {
+			if count == (i+1)%tr.max {
+				return false
+			}
+			count++
+			return true
+		}, &hint)
+		if count > len(exp) {
+			t.Fatalf("expected 1, got %v", count)
+		}
+		if !kindsAreEqual(exp, all) {
+			fmt.Printf("exp: %v\n", exp)
+			fmt.Printf("all: %v\n", all)
+			t.Fatal("mismatch")
+		}
+		for j := 0; j < tr.Len(); j++ {
+			count = 0
+			tr.DescendHint(key, func(item testKind) bool {
+				if count == j {
+					return false
+				}
+				count++
+				return true
+			}, &hint)
+		}
+	}
+}
+
 func TestGenericAscend(t *testing.T) {
 	tr := testNewBTree()
 	var count int
@@ -181,6 +241,51 @@ func TestGenericAscend(t *testing.T) {
 			count++
 			return true
 		})
+		if count > len(exp) {
+			t.Fatalf("expected 1, got %v", count)
+		}
+		if !kindsAreEqual(exp, all) {
+			t.Fatal("mismatch")
+		}
+	}
+}
+
+func TestGenericAscendHint(t *testing.T) {
+	tr := testNewBTree()
+	var hint PathHint
+	var count int
+	tr.AscendHint(testMakeItem(1), func(item testKind) bool {
+		count++
+		return true
+	}, &hint)
+	if count > 0 {
+		t.Fatalf("expected 0, got %v", count)
+	}
+	var keys []testKind
+	for i := 0; i < 1000; i += 10 {
+		keys = append(keys, testMakeItem(i))
+		tr.Set(keys[len(keys)-1])
+		tr.sane()
+	}
+	exp := keys
+	for i := -1; i < 1000; i++ {
+		key := testMakeItem(i)
+		var all []testKind
+		tr.AscendHint(key, func(item testKind) bool {
+			all = append(all, item)
+			return true
+		}, &hint)
+		for len(exp) > 0 && tr.Less(exp[0], key) {
+			exp = exp[1:]
+		}
+		var count int
+		tr.AscendHint(key, func(item testKind) bool {
+			if count == (i+1)%tr.max {
+				return false
+			}
+			count++
+			return true
+		}, &hint)
 		if count > len(exp) {
 			t.Fatalf("expected 1, got %v", count)
 		}
@@ -1321,6 +1426,37 @@ func TestGenericIterSeek(t *testing.T) {
 		iter := tr.Iter()
 		var vals []int
 		for ok := iter.Seek(501); ok; ok = iter.Prev() {
+			vals = append(vals, iter.Item())
+		}
+		iter.Release()
+		assert(vals[0] == 502 && vals[1] == 500)
+	}
+}
+
+func TestGenericIterSeekHint(t *testing.T) {
+	tr := NewBTreeG(func(a, b int) bool {
+		return a < b
+	})
+	var all []int
+	for i := 0; i < 10000; i++ {
+		tr.Set(i * 2)
+		all = append(all, i)
+	}
+	var hint PathHint
+	_ = all
+	{
+		iter := tr.Iter()
+		var vals []int
+		for ok := iter.SeekHint(501, &hint); ok; ok = iter.Next() {
+			vals = append(vals, iter.Item())
+		}
+		iter.Release()
+		assert(vals[0] == 502 && vals[1] == 504)
+	}
+	{
+		iter := tr.Iter()
+		var vals []int
+		for ok := iter.SeekHint(501, &hint); ok; ok = iter.Prev() {
 			vals = append(vals, iter.Item())
 		}
 		iter.Release()

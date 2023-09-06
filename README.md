@@ -219,6 +219,9 @@ Load(item)              // load presorted items into tree
 SetHint(item, *hint)    // insert or replace an existing item
 GetHint(item, *hint)    // get an existing item
 DeleteHint(item, *hint) // delete an item
+AscendHint(key, iter, *hint)
+DescendHint(key, iter, *hint)
+SeekHint(key, iter, *hint)
 
 // Copy-on-write
 Copy()                  // copy the btree
@@ -339,6 +342,9 @@ Load(item)              // load presorted items into tree
 SetHint(item, *hint)    // insert or replace an existing item
 GetHint(item, *hint)    // get an existing item
 DeleteHint(item, *hint) // delete an item
+AscendHint(key, iter, *hint)
+DescendHint(key, iter, *hint)
+SeekHint(key, iter, *hint)
 
 // Copy-on-write
 Copy()                  // copy the btree
