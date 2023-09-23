@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -1483,4 +1484,48 @@ func TestMapDeepCopy(t *testing.T) {
 	}
 	assert(count1 == Ncols*Nvals/2)
 	assert(count2 == Ncols*Nvals/2)
+}
+
+func TestMapJSON(t *testing.T) {
+	inputJson := `{"b":-2,"c":3,"a":1,"b":2}`
+	wantOutputJson := `{"a":1,"b":2,"c":3}`
+
+	var subject Map[string, int]
+	err := json.Unmarshal([]byte(inputJson), &subject)
+	if err != nil {
+		panic(err)
+	}
+
+	assert(subject.Len() == 3)
+	v, _ := subject.Get("a")
+	assert(v == 1)
+	v, _ = subject.Get("b")
+	assert(v == 2)
+	v, _ = subject.Get("c")
+	assert(v == 3)
+
+	outputJson, err := json.Marshal(subject)
+	if err != nil {
+		panic(err)
+	}
+	assert(string(outputJson) == wantOutputJson)
+}
+
+func TestMapEmptyJSON(t *testing.T) {
+	inputJson := `{}`
+	wantOutputJson := `{}`
+
+	var subject Map[string, int]
+	err := json.Unmarshal([]byte(inputJson), &subject)
+	if err != nil {
+		panic(err)
+	}
+
+	assert(subject.Len() == 0)
+
+	outputJson, err := json.Marshal(subject)
+	if err != nil {
+		panic(err)
+	}
+	assert(string(outputJson) == wantOutputJson)
 }

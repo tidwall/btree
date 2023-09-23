@@ -3,7 +3,11 @@
 // license that can be found in the LICENSE file.
 package btree
 
-import "sync/atomic"
+import (
+	"bytes"
+	"encoding/json"
+	"sync/atomic"
+)
 
 type ordered interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
@@ -893,6 +897,50 @@ func (tr *Map[K, V]) Height() int {
 		}
 	}
 	return height
+}
+
+func (tr Map[K, V]) MarshalJSON() ([]byte, error) {
+	if tr.Len() == 0 {
+		return []byte("{}"), nil
+	}
+
+	var out bytes.Buffer
+	var err error
+	out.WriteByte('{')
+	tr.Scan(func(key K, value V) bool {
+		var keyBytes []byte
+		keyBytes, err = json.Marshal(key)
+		if err != nil {
+			return false
+		}
+
+		var valueBytes []byte
+		valueBytes, err = json.Marshal(value)
+		if err != nil {
+			return false
+		}
+
+		out.Write(keyBytes)
+		out.WriteByte(':')
+		out.Write(valueBytes)
+		out.WriteByte(',')
+
+		return true
+	})
+	out.Truncate(out.Len() - 1)
+	out.WriteByte('}')
+	return out.Bytes(), err
+}
+
+func (tr *Map[K, V]) UnmarshalJSON(data []byte) error {
+	var dto map[K]V
+	if err := json.Unmarshal(data, &dto); err != nil {
+		return err
+	}
+	for k, v := range dto {
+		tr.Set(k, v)
+	}
+	return nil
 }
 
 // MapIter represents an iterator for btree.Map
