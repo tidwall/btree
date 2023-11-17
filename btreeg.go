@@ -17,6 +17,7 @@ type BTreeG[T any] struct {
 	empty        T
 	max          int
 	min          int
+	iterPool     sync.Pool
 }
 
 type node[T any] struct {
@@ -57,6 +58,11 @@ func NewBTreeGOptions[T any](less func(a, b T) bool, opts Options) *BTreeG[T] {
 	tr.mu = new(sync.RWMutex)
 	tr.locks = !opts.NoLocks
 	tr.less = less
+	tr.iterPool = sync.Pool{
+		New: func() any {
+			return new(IterG[T])
+		},
+	}
 	tr.init(opts.Degree)
 	return tr
 }
@@ -1128,7 +1134,7 @@ type IterG[T any] struct {
 	seeked  bool
 	atstart bool
 	atend   bool
-	stack0  [4]iterStackItemG[T]
+	stack0  [32]iterStackItemG[T]
 	stack   []iterStackItemG[T]
 	item    T
 }
@@ -1140,16 +1146,17 @@ type iterStackItemG[T any] struct {
 
 // Iter returns a read-only iterator.
 // The Release method must be called finished with iterator.
-func (tr *BTreeG[T]) Iter() IterG[T] {
+func (tr *BTreeG[T]) Iter() *IterG[T] {
 	return tr.iter(false)
 }
 
-func (tr *BTreeG[T]) IterMut() IterG[T] {
+func (tr *BTreeG[T]) IterMut() *IterG[T] {
 	return tr.iter(true)
 }
 
-func (tr *BTreeG[T]) iter(mut bool) IterG[T] {
-	var iter IterG[T]
+func (tr *BTreeG[T]) iter(mut bool) *IterG[T] {
+	iter := tr.iterPool.Get().(*IterG[T])
+	*iter = IterG[T]{}
 	iter.tr = tr
 	iter.mut = mut
 	iter.locked = tr.lock(iter.mut)
@@ -1250,6 +1257,7 @@ func (iter *IterG[T]) Release() {
 	if iter.tr == nil {
 		return
 	}
+	defer iter.tr.iterPool.Put(iter)
 	if iter.locked {
 		iter.tr.unlock(iter.mut)
 		iter.locked = false

@@ -338,7 +338,7 @@ func (tr *BTree) Clear() {
 
 // Iter is an iterator for
 type Iter struct {
-	base IterG[any]
+	base *IterG[any]
 }
 
 // Iter returns a read-only iterator.
