@@ -1,8 +1,10 @@
 package btree
 
 import (
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 func assert(x bool) {
@@ -295,6 +297,22 @@ func TestSeek(t *testing.T) {
 	// test not found
 	_, ok := tr.Seek(N + 1)
 	if ok {
+		panic("!")
+	}
+
+	// test release
+	timeout := time.After(2 * time.Second)
+	chResult := make(chan bool)
+	go func() {
+		_ = tr.IterMut()
+		chResult <- true
+	}()
+
+	select {
+	case <-chResult:
+		fmt.Println("iterMut finish")
+	case <-timeout:
+		fmt.Println("iterMut timeout")
 		panic("!")
 	}
 }
