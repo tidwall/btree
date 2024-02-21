@@ -1,8 +1,10 @@
 package btree
 
 import (
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 )
 
 func assert(x bool) {
@@ -272,4 +274,45 @@ func TestIter(t *testing.T) {
 		i++
 	}
 	iter.Release()
+}
+
+func TestSeek(t *testing.T) {
+	N := 100_000
+	lt := func(a, b interface{}) bool { return a.(int) < b.(int) }
+	eq := func(a, b interface{}) bool { return !lt(a, b) && !lt(b, a) }
+	tr := New(lt)
+	var all []int
+	for i := 0; i < N; i++ {
+		tr.Load(i)
+		all = append(all, i)
+	}
+	// test found
+	for _, item := range all {
+		result, ok := tr.Seek(item)
+		if !ok || !eq(result, item) {
+			panic("!")
+		}
+	}
+
+	// test not found
+	_, ok := tr.Seek(N + 1)
+	if ok {
+		panic("!")
+	}
+
+	// test release
+	timeout := time.After(2 * time.Second)
+	chResult := make(chan bool)
+	go func() {
+		_ = tr.IterMut()
+		chResult <- true
+	}()
+
+	select {
+	case <-chResult:
+		fmt.Println("iterMut finish")
+	case <-timeout:
+		fmt.Println("iterMut timeout")
+		panic("!")
+	}
 }
