@@ -351,9 +351,9 @@ func (tr *BTree) IterMut() Iter {
 	return Iter{tr.base.IterMut()}
 }
 
-// Seek searches for the specified item in tree.
+// Seek searches for an item that's greater than or equal to the specified item in tree.
 // It returns the item found and a boolean indicating if it was found.
-// If the item is not found, the returned item will be nil and ok will be false.
+// If the item is not found, the returned item will be empty and ok will be false.
 func (tr *BTree) Seek(item any) (result any, ok bool) {
 	iter := tr.Iter()
 	if !iter.Seek(item) {
