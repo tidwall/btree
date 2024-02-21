@@ -273,3 +273,28 @@ func TestIter(t *testing.T) {
 	}
 	iter.Release()
 }
+
+func TestSeek(t *testing.T) {
+	N := 100_000
+	lt := func(a, b interface{}) bool { return a.(int) < b.(int) }
+	eq := func(a, b interface{}) bool { return !lt(a, b) && !lt(b, a) }
+	tr := New(lt)
+	var all []int
+	for i := 0; i < N; i++ {
+		tr.Load(i)
+		all = append(all, i)
+	}
+	// test found
+	for _, item := range all {
+		result, ok := tr.Seek(item)
+		if !ok || !eq(result, item) {
+			panic("!")
+		}
+	}
+
+	// test not found
+	_, ok := tr.Seek(N + 1)
+	if ok {
+		panic("!")
+	}
+}
