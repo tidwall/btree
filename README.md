@@ -11,6 +11,7 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) implementation in Go
 - Fast bulk loading for pre-ordered data using the `Load()` method.
 - `Copy()` method with copy-on-write support.
 - [Path hinting](PATH_HINT.md) optimization for operations with nearby keys.
+- Allows for array-like operations. ([Counted B-tree](https://www.chiark.greenend.org.uk/~sgtatham/algorithms/cbtree.html))
 
 ## Using
 
