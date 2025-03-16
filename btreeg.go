@@ -94,7 +94,7 @@ func (n *node[T]) leaf() bool {
 func (tr *BTreeG[T]) bsearch(n *node[T], key T) (index int, found bool) {
 	low, high := 0, len(n.items)
 	for low < high {
-		h := (low + high) / 2
+		h := int(uint(low+high) >> 1) // avoid overflow when computing h
 		if !tr.less(key, n.items[h]) {
 			low = h + 1
 		} else {
