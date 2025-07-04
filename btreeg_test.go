@@ -1479,3 +1479,396 @@ func TestGenericIterSeekPrefix(t *testing.T) {
 		iter.Release()
 	}
 }
+
+func testContiguousDelete(t *testing.T, bench bool, withskips bool, sorted bool,
+	delop func(tr *BTreeG[int], window, skips []int),
+	checkop func(tr *BTreeG[int], window, skips []int),
+) {
+	const maxBTreeSize = 200000 // maximum number of items in tree
+	const deleteTarget = 200000 // stop running when this num items deleted
+	const maxWindowSize = 0.50  // percent: number of items in tree to delete
+	var runs int
+	var count int
+	var total time.Duration
+	if bench {
+		fmt.Printf("%-35s ", t.Name())
+	}
+	limit := deleteTarget
+	if withskips {
+		limit /= 2
+	}
+	for count < limit {
+		items := rand.Perm(rand.Int() % maxBTreeSize)
+		for i := 0; i < len(items); i++ {
+			items[i] *= 10
+		}
+		if sorted {
+			sort.Ints(items)
+		}
+		opts := Options{
+			Degree: (rand.Int() % 16) + 2,
+		}
+		tr := NewBTreeGOptions(func(a, b int) bool {
+			return a < b
+		}, opts)
+		for i := 0; i < len(items); i++ {
+			if sorted {
+				tr.Load(items[i])
+			} else {
+				tr.Set(items[i])
+			}
+		}
+
+		// take half the items from some random location
+
+		min := int(float64(len(items)) * 1.10 * (rand.Float64() - 0.05))
+		max := min + int(float64(len(items))*maxWindowSize*rand.Float64())
+		if max < min {
+			max, min = min, max
+		}
+		var window, skips []int
+		tr.Ascend(min, func(item int) bool {
+			if item > max {
+				return false
+			}
+			if withskips && rand.Int()%2 == 0 {
+				skips = append(skips, item)
+			} else {
+				window = append(window, item)
+			}
+			return true
+		})
+		len1 := tr.Len()
+		start := time.Now()
+		delop(tr, window, skips)
+		total += time.Since(start)
+		len2 := tr.Len()
+		count += len1 - len2
+		tr.sane()
+		for i := 0; i < len(items); i++ {
+			_, ok := tr.Get(items[i])
+			if items[i] < min || items[i] > max {
+				assert(ok)
+			}
+		}
+		for i := 0; i < len(window); i++ {
+			_, ok := tr.Get(window[i])
+			assert(!ok)
+		}
+		for i := 0; i < len(skips); i++ {
+			_, ok := tr.Get(skips[i])
+			assert(ok)
+		}
+		checkop(tr, window, skips)
+		runs++
+	}
+	if bench {
+		fmt.Printf("deleted %d items in %.4f secs, %.0f ns/item, %.0f/sec\n",
+			count,
+			total.Seconds(),
+			float64(total.Nanoseconds())/float64(count),
+			float64(count)/total.Seconds())
+	}
+}
+
+func TestContiguousDelete(t *testing.T) {
+	testContiguousDelete(t, true, false, false,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			for i := 0; i < len(window); i++ {
+				tr.Delete(window[i])
+			}
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+}
+
+func TestContiguousDeleteLoad(t *testing.T) {
+	if os.Getenv("LOADBENCH") == "" {
+		t.Skip()
+	}
+	testContiguousDelete(t, true, false, true,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			for i := 0; i < len(window); i++ {
+				tr.Delete(window[i])
+			}
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+}
+
+func TestContiguousDeleteHint(t *testing.T) {
+	var hint PathHint
+	testContiguousDelete(t, true, false, false,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			for i := 0; i < len(window); i++ {
+				tr.DeleteHint(window[i], &hint)
+			}
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+}
+func TestContiguousDeleteHintLoad(t *testing.T) {
+	if os.Getenv("LOADBENCH") == "" {
+		t.Skip()
+	}
+	var hint PathHint
+	testContiguousDelete(t, true, false, true,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			for i := 0; i < len(window); i++ {
+				tr.DeleteHint(window[i], &hint)
+			}
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+}
+
+func TestContiguousDeleteAscend(t *testing.T) {
+	testContiguousDelete(t, true, false, false,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			tr.DeleteAscend(min, func(item int) Action {
+				if item > max {
+					return Stop
+				}
+				return Delete
+			})
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+}
+
+func TestContiguousDeleteAscendLoad(t *testing.T) {
+	if os.Getenv("LOADBENCH") == "" {
+		t.Skip()
+	}
+	testContiguousDelete(t, true, false, true,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			tr.DeleteAscend(min, func(item int) Action {
+				if item > max {
+					return Stop
+				}
+				return Delete
+			})
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+}
+
+func TestContiguousDeleteAscendSkip(t *testing.T) {
+	testContiguousDelete(t, false, true, false,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			if len(skips) > 0 {
+				if skips[0] < min {
+					min = skips[0]
+				}
+				if skips[len(skips)-1] > max {
+					max = skips[len(skips)-1]
+				}
+			}
+			tr.DeleteAscend(min, func(item int) Action {
+				if item > max {
+					return Stop
+				}
+				if len(skips) > 0 && item == skips[0] {
+					skips = skips[1:]
+					return Keep
+				}
+				return Delete
+			})
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+
+}
+
+func TestContiguousDeleteAscendSkipLoad(t *testing.T) {
+	if os.Getenv("LOADBENCH") == "" {
+		t.Skip()
+	}
+	testContiguousDelete(t, false, true, true,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			if len(skips) > 0 {
+				if skips[0] < min {
+					min = skips[0]
+				}
+				if skips[len(skips)-1] > max {
+					max = skips[len(skips)-1]
+				}
+			}
+			tr.DeleteAscend(min, func(item int) Action {
+				if item > max {
+					return Stop
+				}
+				if len(skips) > 0 && item == skips[0] {
+					skips = skips[1:]
+					return Keep
+				}
+				return Delete
+			})
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+
+}
+
+func TestContiguousDeleteRange(t *testing.T) {
+	var deleted List[int]
+	testContiguousDelete(t, true, false, false,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			deleted = List[int]{}
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			deleted = tr.DeleteRange(min, max, &DeleteRangeOptions{
+				NoReturn:     false,
+				MaxInclusive: true,
+			})
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+			assert(deleted.Len() == len(window))
+			var items []int
+			deleted.Scan(func(item int) bool {
+				items = append(items, item)
+				return true
+			})
+			assert(len(items) == len(window))
+			for i := 0; i < len(items); i++ {
+				assert(items[i] == window[i])
+			}
+			items = nil
+			deleted.Scan(func(item int) bool {
+				items = append(items, item)
+				return true
+			})
+			assert(len(items) == len(window))
+			for i := 0; i < len(items); i++ {
+				assert(items[i] == window[i])
+			}
+		},
+	)
+}
+
+func TestContiguousDeleteRangeNoExtract(t *testing.T) {
+	var deleted List[int]
+	testContiguousDelete(t, true, false, false,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			deleted = List[int]{}
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			deleted = tr.DeleteRange(min, max, &DeleteRangeOptions{
+				NoReturn:     true,
+				MaxInclusive: true,
+			})
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			assert(deleted.Len() == 0)
+		},
+	)
+}
+
+func TestContiguousDeleteRangeExclusive(t *testing.T) {
+	var deleted List[int]
+	var x int
+	var ok bool
+	testContiguousDelete(t, false, false, false,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			deleted = List[int]{}
+			x = 0
+			ok = false
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			deleted = tr.DeleteRange(min, max, &DeleteRangeOptions{
+				NoReturn:     false,
+				MaxInclusive: false,
+			})
+			// delete the max item manually to ensure the window is cleared.
+			x, ok = tr.Delete(max)
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			if len(window) > 0 {
+				assert(deleted.Len() == len(window)-1)
+				assert(ok)
+				assert(x == window[len(window)-1])
+			}
+		},
+	)
+}
+
+func TestContiguousDeleteRangeLoad(t *testing.T) {
+	if os.Getenv("LOADBENCH") == "" {
+		t.Skip()
+	}
+	testContiguousDelete(t, true, false, true,
+		func(tr *BTreeG[int], window, skips []int) {
+			// DELETE
+			if len(window) == 0 {
+				return
+			}
+			min := window[0]
+			max := window[len(window)-1]
+			tr.DeleteRange(min, max, &DeleteRangeOptions{
+				NoReturn:     true,
+				MaxInclusive: true,
+			})
+		},
+		func(tr *BTreeG[int], window, skips []int) {
+			// CHECK
+		},
+	)
+
+}
