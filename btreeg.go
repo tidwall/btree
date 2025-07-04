@@ -3,7 +3,9 @@
 // license that can be found in the LICENSE file.
 package btree
 
-import "sync"
+import (
+	"sync"
+)
 
 type BTreeG[T any] struct {
 	isoid        uint64
@@ -1361,6 +1363,34 @@ func (iter *IterG[T]) Prev() bool {
 // Item returns the current iterator item.
 func (iter *IterG[T]) Item() T {
 	return iter.item
+}
+
+// Pos returns the position of the current iterator item. Returns -1
+// if the tree is empty or the iterator is at the beginning of the tree.
+// Overall, the complexity will be O(log N⋅M) where stack height will
+// follow the height of the btree, which is log N, and M as the degree.
+func (iter *IterG[T]) Pos() int {
+	if iter.tr == nil {
+		return -1
+	}
+	if !iter.seeked {
+		return -1
+	}
+	count := 0
+	for i, s := range iter.stack {
+		count += s.i
+		if !s.n.leaf() {
+			c := *s.n.children
+			t := s.i
+			if i == len(iter.stack)-1 {
+				t++
+			}
+			for j := 0; j < t; j++ {
+				count += c[j].count
+			}
+		}
+	}
+	return count
 }
 
 // Items returns all the items in order.
