@@ -3,10 +3,37 @@
 // license that can be found in the LICENSE file.
 package btree
 
+import "sync/atomic"
+
 type ordered interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
 		~float32 | ~float64 | ~string
+}
+
+type copier[T any] interface {
+	Copy() T
+}
+
+type isoCopier[T any] interface {
+	IsoCopy() T
+}
+
+func degreeToMinMax(deg int) (min, max int) {
+	if deg <= 0 {
+		deg = 32
+	} else if deg == 1 {
+		deg = 2 // must have at least 2
+	}
+	max = deg*2 - 1 // max items per node. max children is +1
+	min = max / 2
+	return min, max
+}
+
+var gisoid uint64
+
+func newIsoID() uint64 {
+	return atomic.AddUint64(&gisoid, 1)
 }
 
 type mapPair[K ordered, V any] struct {
@@ -18,12 +45,14 @@ type mapPair[K ordered, V any] struct {
 }
 
 type Map[K ordered, V any] struct {
-	cow   uint64
-	root  *mapNode[K, V]
-	count int
-	empty mapPair[K, V]
-	min   int // min items
-	max   int // max items
+	isoid         uint64
+	root          *mapNode[K, V]
+	count         int
+	empty         mapPair[K, V]
+	min           int // min items
+	max           int // max items
+	copyValues    bool
+	isoCopyValues bool
 }
 
 func NewMap[K ordered, V any](degree int) *Map[K, V] {
@@ -33,22 +62,30 @@ func NewMap[K ordered, V any](degree int) *Map[K, V] {
 }
 
 type mapNode[K ordered, V any] struct {
-	cow      uint64
+	isoid    uint64
 	count    int
 	items    []mapPair[K, V]
 	children *[]*mapNode[K, V]
 }
 
-// This operation should not be inlined because it's expensive and rarely
-// called outside of heavy copy-on-write situations. Marking it "noinline"
-// allows for the parent cowLoad to be inlined.
-// go:noinline
+// Copy the node for safe isolation.
 func (tr *Map[K, V]) copy(n *mapNode[K, V]) *mapNode[K, V] {
 	n2 := new(mapNode[K, V])
-	n2.cow = tr.cow
+	n2.isoid = tr.isoid
 	n2.count = n.count
 	n2.items = make([]mapPair[K, V], len(n.items), cap(n.items))
 	copy(n2.items, n.items)
+	if tr.copyValues {
+		for i := 0; i < len(n2.items); i++ {
+			n2.items[i].value =
+				((interface{})(n2.items[i].value)).(copier[V]).Copy()
+		}
+	} else if tr.isoCopyValues {
+		for i := 0; i < len(n2.items); i++ {
+			n2.items[i].value =
+				((interface{})(n2.items[i].value)).(isoCopier[V]).IsoCopy()
+		}
+	}
 	if !n.leaf() {
 		n2.children = new([]*mapNode[K, V])
 		*n2.children = make([]*mapNode[K, V], len(*n.children), tr.max+1)
@@ -57,25 +94,29 @@ func (tr *Map[K, V]) copy(n *mapNode[K, V]) *mapNode[K, V] {
 	return n2
 }
 
-// cowLoad loads the provided node and, if needed, performs a copy-on-write.
-func (tr *Map[K, V]) cowLoad(cn **mapNode[K, V]) *mapNode[K, V] {
-	if (*cn).cow != tr.cow {
+// isoLoad loads the provided node and, if needed, performs a copy-on-write.
+func (tr *Map[K, V]) isoLoad(cn **mapNode[K, V], mut bool) *mapNode[K, V] {
+	if mut && (*cn).isoid != tr.isoid {
 		*cn = tr.copy(*cn)
 	}
 	return *cn
 }
 
 func (tr *Map[K, V]) Copy() *Map[K, V] {
+	return tr.IsoCopy()
+}
+
+func (tr *Map[K, V]) IsoCopy() *Map[K, V] {
 	tr2 := new(Map[K, V])
 	*tr2 = *tr
-	tr2.cow = gcow.Add(1)
-	tr.cow = gcow.Add(1)
+	tr2.isoid = newIsoID()
+	tr.isoid = newIsoID()
 	return tr2
 }
 
 func (tr *Map[K, V]) newNode(leaf bool) *mapNode[K, V] {
 	n := new(mapNode[K, V])
-	n.cow = tr.cow
+	n.isoid = tr.isoid
 	if !leaf {
 		n.children = new([]*mapNode[K, V])
 	}
@@ -87,17 +128,17 @@ func (n *mapNode[K, V]) leaf() bool {
 	return n.children == nil
 }
 
-func (tr *Map[K, V]) bsearch(n *mapNode[K, V], key K) (index int, found bool) {
+func (tr *Map[K, V]) search(n *mapNode[K, V], key K) (index int, found bool) {
 	low, high := 0, len(n.items)
 	for low < high {
-		h := int(uint(low+high) >> 1)
-		if key >= n.items[h].key {
+		h := (low + high) / 2
+		if !(key < n.items[h].key) {
 			low = h + 1
 		} else {
 			high = h
 		}
 	}
-	if low > 0 && n.items[low-1].key >= key {
+	if low > 0 && !(n.items[low-1].key < key) {
 		return low - 1, true
 	}
 	return low, false
@@ -108,6 +149,10 @@ func (tr *Map[K, V]) init(degree int) {
 		return
 	}
 	tr.min, tr.max = degreeToMinMax(degree)
+	_, tr.copyValues = ((interface{})(tr.empty.value)).(copier[V])
+	if !tr.copyValues {
+		_, tr.isoCopyValues = ((interface{})(tr.empty.value)).(isoCopier[V])
+	}
 }
 
 // Set or replace a value for a key
@@ -144,46 +189,19 @@ func (tr *Map[K, V]) nodeSplit(n *mapNode[K, V],
 	i := tr.max / 2
 	median = n.items[i]
 
-	const sliceItems = true
-
 	// right node
 	right = tr.newNode(n.leaf())
-	if sliceItems {
-		right.items = n.items[i+1:]
-		if !n.leaf() {
-			*right.children = (*n.children)[i+1:]
-		}
-	} else {
-		right.items = make([]mapPair[K, V], len(n.items[i+1:]), tr.max/2)
-		copy(right.items, n.items[i+1:])
-		if !n.leaf() {
-			*right.children = make([]*mapNode[K, V],
-				len((*n.children)[i+1:]), tr.max+1)
-			copy(*right.children, (*n.children)[i+1:])
-		}
+	right.items = n.items[i+1:]
+	if !n.leaf() {
+		*right.children = (*n.children)[i+1:]
 	}
 	right.updateCount()
 
 	// left node
-	if sliceItems {
-		n.items[i] = tr.empty
-		n.items = n.items[:i:i]
-		if !n.leaf() {
-			*n.children = (*n.children)[: i+1 : i+1]
-		}
-	} else {
-		for j := i; j < len(n.items); j++ {
-			n.items[j] = tr.empty
-		}
-		if !n.leaf() {
-			for j := i + 1; j < len((*n.children)); j++ {
-				(*n.children)[j] = nil
-			}
-		}
-		n.items = n.items[:i]
-		if !n.leaf() {
-			*n.children = (*n.children)[:i+1]
-		}
+	n.items[i] = tr.empty
+	n.items = n.items[:i:i]
+	if !n.leaf() {
+		*n.children = (*n.children)[: i+1 : i+1]
 	}
 	n.updateCount()
 	return right, median
@@ -200,8 +218,8 @@ func (n *mapNode[K, V]) updateCount() {
 
 func (tr *Map[K, V]) nodeSet(pn **mapNode[K, V], item mapPair[K, V],
 ) (prev V, replaced bool, split bool) {
-	n := tr.cowLoad(pn)
-	i, found := tr.bsearch(n, item.key)
+	n := tr.isoLoad(pn, true)
+	i, found := tr.search(n, item.key)
 	if found {
 		prev = n.items[i].value
 		n.items[i] = item
@@ -238,13 +256,24 @@ func (tr *Map[K, V]) nodeSet(pn **mapNode[K, V], item mapPair[K, V],
 }
 
 func (tr *Map[K, V]) Scan(iter func(key K, value V) bool) {
+	tr.scan(iter, false)
+}
+
+func (tr *Map[K, V]) ScanMut(iter func(key K, value V) bool) {
+	tr.scan(iter, true)
+}
+
+func (tr *Map[K, V]) scan(iter func(key K, value V) bool, mut bool) {
 	if tr.root == nil {
 		return
 	}
-	tr.root.scan(iter)
+	tr.nodeScan(&tr.root, iter, mut)
 }
 
-func (n *mapNode[K, V]) scan(iter func(key K, value V) bool) bool {
+func (tr *Map[K, V]) nodeScan(cn **mapNode[K, V],
+	iter func(key K, value V) bool, mut bool,
+) bool {
+	n := tr.isoLoad(cn, mut)
 	if n.leaf() {
 		for i := 0; i < len(n.items); i++ {
 			if !iter(n.items[i].key, n.items[i].value) {
@@ -254,31 +283,50 @@ func (n *mapNode[K, V]) scan(iter func(key K, value V) bool) bool {
 		return true
 	}
 	for i := 0; i < len(n.items); i++ {
-		if !(*n.children)[i].scan(iter) {
+		if !tr.nodeScan(&(*n.children)[i], iter, mut) {
 			return false
 		}
 		if !iter(n.items[i].key, n.items[i].value) {
 			return false
 		}
 	}
-	return (*n.children)[len(*n.children)-1].scan(iter)
+	return tr.nodeScan(&(*n.children)[len(*n.children)-1], iter, mut)
 }
 
-// Get a value for key
+// Get a value for key.
 func (tr *Map[K, V]) Get(key K) (V, bool) {
+	return tr.get(key, false)
+}
+
+// GetMut gets a value for key.
+// If needed, this may perform a copy the resulting value before returning.
+//
+// Mut methods are only useful when all of the following are true:
+//   - The interior data of the value requires changes.
+//   - The value is a pointer type.
+//   - The BTree has been copied using `Copy()` or `IsoCopy()`.
+//   - The value itself has a `Copy()` or `IsoCopy()` method.
+//
+// Mut methods may modify the tree structure and should have the same
+// considerations as other mutable operations like Set, Delete, Clear, etc.
+func (tr *Map[K, V]) GetMut(key K) (V, bool) {
+	return tr.get(key, true)
+}
+
+func (tr *Map[K, V]) get(key K, mut bool) (V, bool) {
 	if tr.root == nil {
 		return tr.empty.value, false
 	}
-	n := tr.root
+	n := tr.isoLoad(&tr.root, mut)
 	for {
-		i, found := tr.bsearch(n, key)
+		i, found := tr.search(n, key)
 		if found {
 			return n.items[i].value, true
 		}
 		if n.leaf() {
 			return tr.empty.value, false
 		}
-		n = (*n.children)[i]
+		n = tr.isoLoad(&(*n.children)[i], mut)
 	}
 }
 
@@ -309,13 +357,13 @@ func (tr *Map[K, V]) Delete(key K) (V, bool) {
 
 func (tr *Map[K, V]) delete(pn **mapNode[K, V], max bool, key K,
 ) (mapPair[K, V], bool) {
-	n := tr.cowLoad(pn)
+	n := tr.isoLoad(pn, true)
 	var i int
 	var found bool
 	if max {
 		i, found = len(n.items)-1, true
 	} else {
-		i, found = tr.bsearch(n, key)
+		i, found = tr.search(n, key)
 	}
 	if n.leaf() {
 		if found {
@@ -364,8 +412,8 @@ func (tr *Map[K, V]) nodeRebalance(n *mapNode[K, V], i int) {
 	}
 
 	// ensure copy-on-write
-	left := tr.cowLoad(&(*n.children)[i])
-	right := tr.cowLoad(&(*n.children)[i+1])
+	left := tr.isoLoad(&(*n.children)[i], true)
+	right := tr.isoLoad(&(*n.children)[i+1], true)
 
 	if len(left.items)+len(right.items) < tr.max {
 		// Merges the left and right children nodes together as a single node
@@ -442,21 +490,30 @@ func (tr *Map[K, V]) nodeRebalance(n *mapNode[K, V], i int) {
 // Pass nil for pivot to scan all item in ascending order
 // Return false to stop iterating
 func (tr *Map[K, V]) Ascend(pivot K, iter func(key K, value V) bool) {
+	tr.ascend(pivot, iter, false)
+}
+
+func (tr *Map[K, V]) AscendMut(pivot K, iter func(key K, value V) bool) {
+	tr.ascend(pivot, iter, true)
+}
+
+func (tr *Map[K, V]) ascend(pivot K, iter func(key K, value V) bool, mut bool) {
 	if tr.root == nil {
 		return
 	}
-	tr.ascend(tr.root, pivot, iter)
+	tr.nodeAscend(&tr.root, pivot, iter, mut)
 }
 
 // The return value of this function determines whether we should keep iterating
 // upon this functions return.
-func (tr *Map[K, V]) ascend(n *mapNode[K, V], pivot K,
-	iter func(key K, value V) bool,
+func (tr *Map[K, V]) nodeAscend(cn **mapNode[K, V], pivot K,
+	iter func(key K, value V) bool, mut bool,
 ) bool {
-	i, found := tr.bsearch(n, pivot)
+	n := tr.isoLoad(cn, mut)
+	i, found := tr.search(n, pivot)
 	if !found {
 		if !n.leaf() {
-			if !tr.ascend((*n.children)[i], pivot, iter) {
+			if !tr.nodeAscend(&(*n.children)[i], pivot, iter, mut) {
 				return false
 			}
 		}
@@ -470,7 +527,7 @@ func (tr *Map[K, V]) ascend(n *mapNode[K, V], pivot K,
 			return false
 		}
 		if !n.leaf() {
-			if !(*n.children)[i+1].scan(iter) {
+			if !tr.nodeScan(&(*n.children)[i+1], iter, mut) {
 				return false
 			}
 		}
@@ -479,13 +536,24 @@ func (tr *Map[K, V]) ascend(n *mapNode[K, V], pivot K,
 }
 
 func (tr *Map[K, V]) Reverse(iter func(key K, value V) bool) {
+	tr.reverse(iter, false)
+}
+
+func (tr *Map[K, V]) ReverseMut(iter func(key K, value V) bool) {
+	tr.reverse(iter, true)
+}
+
+func (tr *Map[K, V]) reverse(iter func(key K, value V) bool, mut bool) {
 	if tr.root == nil {
 		return
 	}
-	tr.root.reverse(iter)
+	tr.nodeReverse(&tr.root, iter, mut)
 }
 
-func (n *mapNode[K, V]) reverse(iter func(key K, value V) bool) bool {
+func (tr *Map[K, V]) nodeReverse(cn **mapNode[K, V],
+	iter func(key K, value V) bool, mut bool,
+) bool {
+	n := tr.isoLoad(cn, mut)
 	if n.leaf() {
 		for i := len(n.items) - 1; i >= 0; i-- {
 			if !iter(n.items[i].key, n.items[i].value) {
@@ -494,14 +562,14 @@ func (n *mapNode[K, V]) reverse(iter func(key K, value V) bool) bool {
 		}
 		return true
 	}
-	if !(*n.children)[len(*n.children)-1].reverse(iter) {
+	if !tr.nodeReverse(&(*n.children)[len(*n.children)-1], iter, mut) {
 		return false
 	}
 	for i := len(n.items) - 1; i >= 0; i-- {
 		if !iter(n.items[i].key, n.items[i].value) {
 			return false
 		}
-		if !(*n.children)[i].reverse(iter) {
+		if !tr.nodeReverse(&(*n.children)[i], iter, mut) {
 			return false
 		}
 	}
@@ -512,19 +580,32 @@ func (n *mapNode[K, V]) reverse(iter func(key K, value V) bool) bool {
 // Pass nil for pivot to scan all item in descending order
 // Return false to stop iterating
 func (tr *Map[K, V]) Descend(pivot K, iter func(key K, value V) bool) {
+	tr.descend(pivot, iter, false)
+}
+
+func (tr *Map[K, V]) DescendMut(pivot K, iter func(key K, value V) bool) {
+	tr.descend(pivot, iter, true)
+}
+
+func (tr *Map[K, V]) descend(
+	pivot K,
+	iter func(key K, value V) bool,
+	mut bool,
+) {
 	if tr.root == nil {
 		return
 	}
-	tr.descend(tr.root, pivot, iter)
+	tr.nodeDescend(&tr.root, pivot, iter, mut)
 }
 
-func (tr *Map[K, V]) descend(n *mapNode[K, V], pivot K,
-	iter func(key K, value V) bool,
+func (tr *Map[K, V]) nodeDescend(cn **mapNode[K, V], pivot K,
+	iter func(key K, value V) bool, mut bool,
 ) bool {
-	i, found := tr.bsearch(n, pivot)
+	n := tr.isoLoad(cn, mut)
+	i, found := tr.search(n, pivot)
 	if !found {
 		if !n.leaf() {
-			if !tr.descend((*n.children)[i], pivot, iter) {
+			if !tr.nodeDescend(&(*n.children)[i], pivot, iter, mut) {
 				return false
 			}
 		}
@@ -535,7 +616,7 @@ func (tr *Map[K, V]) descend(n *mapNode[K, V], pivot K,
 			return false
 		}
 		if !n.leaf() {
-			if !(*n.children)[i].reverse(iter) {
+			if !tr.nodeReverse(&(*n.children)[i], iter, mut) {
 				return false
 			}
 		}
@@ -549,7 +630,7 @@ func (tr *Map[K, V]) Load(key K, value V) (V, bool) {
 	if tr.root == nil {
 		return tr.Set(item.key, item.value)
 	}
-	n := tr.cowLoad(&tr.root)
+	n := tr.isoLoad(&tr.root, true)
 	for {
 		n.count++ // optimistically update counts
 		if n.leaf() {
@@ -562,7 +643,7 @@ func (tr *Map[K, V]) Load(key K, value V) (V, bool) {
 			}
 			break
 		}
-		n = tr.cowLoad(&(*n.children)[len(*n.children)-1])
+		n = tr.isoLoad(&(*n.children)[len(*n.children)-1], true)
 	}
 	// revert the counts
 	n = tr.root
@@ -579,32 +660,48 @@ func (tr *Map[K, V]) Load(key K, value V) (V, bool) {
 // Min returns the minimum item in tree.
 // Returns nil if the treex has no items.
 func (tr *Map[K, V]) Min() (K, V, bool) {
+	return tr.minMut(false)
+}
+
+func (tr *Map[K, V]) MinMut() (K, V, bool) {
+	return tr.minMut(true)
+}
+
+func (tr *Map[K, V]) minMut(mut bool) (key K, value V, ok bool) {
 	if tr.root == nil {
-		return tr.empty.key, tr.empty.value, false
+		return key, value, false
 	}
-	n := tr.root
+	n := tr.isoLoad(&tr.root, mut)
 	for {
 		if n.leaf() {
 			item := n.items[0]
 			return item.key, item.value, true
 		}
-		n = (*n.children)[0]
+		n = tr.isoLoad(&(*n.children)[0], mut)
 	}
 }
 
 // Max returns the maximum item in tree.
 // Returns nil if the tree has no items.
 func (tr *Map[K, V]) Max() (K, V, bool) {
+	return tr.maxMut(false)
+}
+
+func (tr *Map[K, V]) MaxMut() (K, V, bool) {
+	return tr.maxMut(true)
+}
+
+func (tr *Map[K, V]) maxMut(mut bool) (K, V, bool) {
 	if tr.root == nil {
 		return tr.empty.key, tr.empty.value, false
 	}
-	n := tr.root
+	n := tr.isoLoad(&tr.root, mut)
 	for {
 		if n.leaf() {
 			item := n.items[len(n.items)-1]
 			return item.key, item.value, true
 		}
-		n = (*n.children)[len(*n.children)-1]
+		n = tr.isoLoad(&(*n.children)[len(*n.children)-1], mut)
 	}
 }
 
@@ -614,7 +711,7 @@ func (tr *Map[K, V]) PopMin() (K, V, bool) {
 	if tr.root == nil {
 		return tr.empty.key, tr.empty.value, false
 	}
-	n := tr.cowLoad(&tr.root)
+	n := tr.isoLoad(&tr.root, true)
 	var item mapPair[K, V]
 	for {
 		n.count-- // optimistically update counts
@@ -632,7 +729,7 @@ func (tr *Map[K, V]) PopMin() (K, V, bool) {
 			}
 			return item.key, item.value, true
 		}
-		n = tr.cowLoad(&(*n.children)[0])
+		n = tr.isoLoad(&(*n.children)[0], true)
 	}
 	// revert the counts
 	n = tr.root
@@ -656,7 +753,7 @@ func (tr *Map[K, V]) PopMax() (K, V, bool) {
 	if tr.root == nil {
 		return tr.empty.key, tr.empty.value, false
 	}
-	n := tr.cowLoad(&tr.root)
+	n := tr.isoLoad(&tr.root, true)
 	var item mapPair[K, V]
 	for {
 		n.count-- // optimistically update counts
@@ -673,7 +770,7 @@ func (tr *Map[K, V]) PopMax() (K, V, bool) {
 			}
 			return item.key, item.value, true
 		}
-		n = tr.cowLoad(&(*n.children)[len(*n.children)-1])
+		n = tr.isoLoad(&(*n.children)[len(*n.children)-1], true)
 	}
 	// revert the counts
 	n = tr.root
@@ -694,10 +791,18 @@ func (tr *Map[K, V]) PopMax() (K, V, bool) {
 // GetAt returns the value at index.
 // Return nil if the tree is empty or the index is out of bounds.
 func (tr *Map[K, V]) GetAt(index int) (K, V, bool) {
+	return tr.getAt(index, false)
+}
+
+func (tr *Map[K, V]) GetAtMut(index int) (K, V, bool) {
+	return tr.getAt(index, true)
+}
+
+func (tr *Map[K, V]) getAt(index int, mut bool) (K, V, bool) {
 	if tr.root == nil || index < 0 || index >= tr.count {
 		return tr.empty.key, tr.empty.value, false
 	}
-	n := tr.root
+	n := tr.isoLoad(&tr.root, mut)
 	for {
 		if n.leaf() {
 			return n.items[index].key, n.items[index].value, true
@@ -711,7 +816,7 @@ func (tr *Map[K, V]) GetAt(index int) (K, V, bool) {
 			}
 			index -= (*n.children)[i].count + 1
 		}
-		n = (*n.children)[i]
+		n = tr.isoLoad(&(*n.children)[i], mut)
 	}
 }
 
@@ -724,7 +829,7 @@ func (tr *Map[K, V]) DeleteAt(index int) (K, V, bool) {
 	var pathbuf [8]uint8 // track the path
 	path := pathbuf[:0]
 	var item mapPair[K, V]
-	n := tr.cowLoad(&tr.root)
+	n := tr.isoLoad(&tr.root, true)
 outer:
 	for {
 		n.count-- // optimistically update counts
@@ -756,7 +861,7 @@ outer:
 			index -= (*n.children)[i].count + 1
 		}
 		path = append(path, uint8(i))
-		n = tr.cowLoad(&(*n.children)[i])
+		n = tr.isoLoad(&(*n.children)[i], true)
 	}
 	// revert the counts
 	n = tr.root
@@ -793,6 +898,7 @@ func (tr *Map[K, V]) Height() int {
 // MapIter represents an iterator for btree.Map
 type MapIter[K ordered, V any] struct {
 	tr      *Map[K, V]
+	mut     bool
 	seeked  bool
 	atstart bool
 	atend   bool
@@ -807,8 +913,17 @@ type mapIterStackItem[K ordered, V any] struct {
 
 // Iter returns a read-only iterator.
 func (tr *Map[K, V]) Iter() MapIter[K, V] {
+	return tr.iter(false)
+}
+
+func (tr *Map[K, V]) IterMut() MapIter[K, V] {
+	return tr.iter(true)
+}
+
+func (tr *Map[K, V]) iter(mut bool) MapIter[K, V] {
 	var iter MapIter[K, V]
 	iter.tr = tr
+	iter.mut = mut
 	return iter
 }
 
@@ -823,9 +938,9 @@ func (iter *MapIter[K, V]) Seek(key K) bool {
 	if iter.tr.root == nil {
 		return false
 	}
-	n := iter.tr.root
+	n := iter.tr.isoLoad(&iter.tr.root, iter.mut)
 	for {
-		i, found := iter.tr.bsearch(n, key)
+		i, found := iter.tr.search(n, key)
 		iter.stack = append(iter.stack, mapIterStackItem[K, V]{n, i})
 		if found {
 			iter.item = n.items[i]
@@ -835,7 +950,7 @@ func (iter *MapIter[K, V]) Seek(key K) bool {
 			iter.stack[len(iter.stack)-1].i--
 			return iter.Next()
 		}
-		n = (*n.children)[i]
+		n = iter.tr.isoLoad(&(*n.children)[i], iter.mut)
 	}
 }
 
@@ -852,13 +967,13 @@ func (iter *MapIter[K, V]) First() bool {
 	if iter.tr.root == nil {
 		return false
 	}
-	n := iter.tr.root
+	n := iter.tr.isoLoad(&iter.tr.root, iter.mut)
 	for {
 		iter.stack = append(iter.stack, mapIterStackItem[K, V]{n, 0})
 		if n.leaf() {
 			break
 		}
-		n = (*n.children)[0]
+		n = iter.tr.isoLoad(&(*n.children)[0], iter.mut)
 	}
 	s := &iter.stack[len(iter.stack)-1]
 	iter.item = s.n.items[s.i]
@@ -876,14 +991,14 @@ func (iter *MapIter[K, V]) Last() bool {
 	if iter.tr.root == nil {
 		return false
 	}
-	n := iter.tr.root
+	n := iter.tr.isoLoad(&iter.tr.root, iter.mut)
 	for {
 		iter.stack = append(iter.stack, mapIterStackItem[K, V]{n, len(n.items)})
 		if n.leaf() {
 			iter.stack[len(iter.stack)-1].i--
 			break
 		}
-		n = (*n.children)[len(n.items)]
+		n = iter.tr.isoLoad(&(*n.children)[len(n.items)], iter.mut)
 	}
 	s := &iter.stack[len(iter.stack)-1]
 	iter.item = s.n.items[s.i]
@@ -923,13 +1038,13 @@ func (iter *MapIter[K, V]) Next() bool {
 			}
 		}
 	} else {
-		n := (*s.n.children)[s.i]
+		n := iter.tr.isoLoad(&(*s.n.children)[s.i], iter.mut)
 		for {
 			iter.stack = append(iter.stack, mapIterStackItem[K, V]{n, 0})
 			if n.leaf() {
 				break
 			}
-			n = (*n.children)[0]
+			n = iter.tr.isoLoad(&(*n.children)[0], iter.mut)
 		}
 	}
 	s = &iter.stack[len(iter.stack)-1]
@@ -971,7 +1086,7 @@ func (iter *MapIter[K, V]) Prev() bool {
 			}
 		}
 	} else {
-		n := (*s.n.children)[s.i]
+		n := iter.tr.isoLoad(&(*s.n.children)[s.i], iter.mut)
 		for {
 			iter.stack = append(iter.stack,
 				mapIterStackItem[K, V]{n, len(n.items)})
@@ -979,7 +1094,7 @@ func (iter *MapIter[K, V]) Prev() bool {
 				iter.stack[len(iter.stack)-1].i--
 				break
 			}
-			n = (*n.children)[len(n.items)]
+			n = iter.tr.isoLoad(&(*n.children)[len(n.items)], iter.mut)
 		}
 	}
 	s = &iter.stack[len(iter.stack)-1]
@@ -999,14 +1114,23 @@ func (iter *MapIter[K, V]) Value() V {
 
 // Values returns all the values in order.
 func (tr *Map[K, V]) Values() []V {
+	return tr.values(false)
+}
+
+func (tr *Map[K, V]) ValuesMut() []V {
+	return tr.values(true)
+}
+
+func (tr *Map[K, V]) values(mut bool) []V {
 	values := make([]V, 0, tr.Len())
 	if tr.root != nil {
-		values = tr.root.values(values)
+		values = tr.nodeValues(&tr.root, values, mut)
 	}
 	return values
 }
 
-func (n *mapNode[K, V]) values(values []V) []V {
+func (tr *Map[K, V]) nodeValues(cn **mapNode[K, V], values []V, mut bool) []V {
+	n := tr.isoLoad(cn, mut)
 	if n.leaf() {
 		for i := 0; i < len(n.items); i++ {
 			values = append(values, n.items[i].value)
@@ -1014,10 +1138,10 @@ func (n *mapNode[K, V]) values(values []V) []V {
 		return values
 	}
 	for i := 0; i < len(n.items); i++ {
-		values = (*n.children)[i].values(values)
+		values = tr.nodeValues(&(*n.children)[i], values, mut)
 		values = append(values, n.items[i].value)
 	}
-	return (*n.children)[len(*n.children)-1].values(values)
+	return tr.nodeValues(&(*n.children)[len(*n.children)-1], values, mut)
 }
 
 // Keys returns all the keys in order.
@@ -1045,15 +1169,26 @@ func (n *mapNode[K, V]) keys(keys []K) []K {
 
 // KeyValues returns all the keys and values in order.
 func (tr *Map[K, V]) KeyValues() ([]K, []V) {
+	return tr.keyValues(false)
+}
+
+func (tr *Map[K, V]) KeyValuesMut() ([]K, []V) {
+	return tr.keyValues(true)
+}
+
+func (tr *Map[K, V]) keyValues(mut bool) ([]K, []V) {
 	keys := make([]K, 0, tr.Len())
 	values := make([]V, 0, tr.Len())
 	if tr.root != nil {
-		keys, values = tr.root.keyValues(keys, values)
+		keys, values = tr.nodeKeyValues(&tr.root, keys, values, mut)
 	}
 	return keys, values
 }
 
-func (n *mapNode[K, V]) keyValues(keys []K, values []V) ([]K, []V) {
+func (tr *Map[K, V]) nodeKeyValues(cn **mapNode[K, V], keys []K, values []V,
+	mut bool,
+) ([]K, []V) {
+	n := tr.isoLoad(cn, mut)
 	if n.leaf() {
 		for i := 0; i < len(n.items); i++ {
 			keys = append(keys, n.items[i].key)
@@ -1062,11 +1197,12 @@ func (n *mapNode[K, V]) keyValues(keys []K, values []V) ([]K, []V) {
 		return keys, values
 	}
 	for i := 0; i < len(n.items); i++ {
-		keys, values = (*n.children)[i].keyValues(keys, values)
+		keys, values = tr.nodeKeyValues(&(*n.children)[i], keys, values, mut)
 		keys = append(keys, n.items[i].key)
 		values = append(values, n.items[i].value)
 	}
-	return (*n.children)[len(*n.children)-1].keyValues(keys, values)
+	return tr.nodeKeyValues(&(*n.children)[len(*n.children)-1], keys, values,
+		mut)
 }
 
 // Clear will delete all items.

@@ -21,6 +21,10 @@ func testMapNewBTree() *Map[testMapKind, testMapKind] {
 	return new(Map[testMapKind, testMapKind])
 }
 
+func testMapNewBTreeDegrees(degree int) *Map[testMapKind, testMapKind] {
+	return NewMap[testMapKind, testMapKind](degree)
+}
+
 func randMapKeys(N int) (keys []testMapKind) {
 	keys = make([]testMapKind, N)
 	for _, i := range rand.Perm(N) {
@@ -460,31 +464,33 @@ func TestMapBTreeOne(t *testing.T) {
 }
 
 func TestMapBTree256(t *testing.T) {
-	tr := testMapNewBTree()
-	var n int
-	for j := 0; j < 2; j++ {
-		for _, i := range rand.Perm(256) {
-			tr.Set(testMapMakeItem(i), testMapMakeItem(i))
-			n++
-			if tr.Len() != n {
-				t.Fatalf("expected 256, got %d", n)
+	for degree := -1; degree < 256; degree++ {
+		tr := testMapNewBTreeDegrees(degree)
+		var n int
+		for j := 0; j < 2; j++ {
+			for _, i := range rand.Perm(256) {
+				tr.Set(testMapMakeItem(i), testMapMakeItem(i))
+				n++
+				if tr.Len() != n {
+					t.Fatalf("expected 256, got %d", n)
+				}
 			}
-		}
-		for _, i := range rand.Perm(256) {
-			if v, ok := tr.Get(testMapMakeItem(i)); !ok || !tr.eq(v, testMapMakeItem(i)) {
-				t.Fatalf("expected %v, got %v", i, v)
+			for _, i := range rand.Perm(256) {
+				if v, ok := tr.Get(testMapMakeItem(i)); !ok || !tr.eq(v, testMapMakeItem(i)) {
+					t.Fatalf("expected %v, got %v", i, v)
+				}
 			}
-		}
-		for _, i := range rand.Perm(256) {
-			tr.Delete(testMapMakeItem(i))
-			n--
-			if tr.Len() != n {
-				t.Fatalf("expected 256, got %d", n)
+			for _, i := range rand.Perm(256) {
+				tr.Delete(testMapMakeItem(i))
+				n--
+				if tr.Len() != n {
+					t.Fatalf("expected 256, got %d", n)
+				}
 			}
-		}
-		for _, i := range rand.Perm(256) {
-			if v, ok := tr.Get(testMapMakeItem(i)); ok || !tr.eq(v, tr.empty.value) {
-				t.Fatal("expected nil")
+			for _, i := range rand.Perm(256) {
+				if v, ok := tr.Get(testMapMakeItem(i)); ok || !tr.eq(v, tr.empty.value) {
+					t.Fatal("expected nil")
+				}
 			}
 		}
 	}
@@ -1308,4 +1314,173 @@ func TestMapCopy(t *testing.T) {
 	if !mapEntriesEqual(e11, e12) {
 		panic("!")
 	}
+}
+
+type testNonCopyItem struct {
+	data string
+}
+
+func newTestNonCopyItem(data string) *testNonCopyItem {
+	return &testNonCopyItem{data: data}
+}
+
+type testCopyItem struct {
+	data string
+}
+
+func newTestCopyItem(data string) *testCopyItem {
+	return &testCopyItem{data: data}
+}
+
+func (item *testCopyItem) Copy() *testCopyItem {
+	return &testCopyItem{data: item.data}
+}
+
+type testIsoCopyItem struct {
+	data string
+}
+
+func newTestIsoCopyItem(data string) *testIsoCopyItem {
+	return &testIsoCopyItem{data: data}
+}
+
+func (item *testIsoCopyItem) Copy() *testIsoCopyItem {
+	return &testIsoCopyItem{data: item.data}
+}
+
+func TestMapValueCopy(t *testing.T) {
+	t.Run("without-copy", func(t *testing.T) {
+		var m Map[string, *testNonCopyItem]
+		m.Set("hello", newTestNonCopyItem("world"))
+
+		m2 := m.Copy()
+
+		v, _ := m.Get("hello")
+		assert(v.data == "world")
+		v, _ = m2.Get("hello")
+		assert(v.data == "world")
+
+		// now get and change the value, mutable, this will affect both trees
+		v, _ = m.GetMut("hello")
+		v.data = "planet"
+
+		v, _ = m.Get("hello")
+		assert(v.data == "planet")
+		v, _ = m2.Get("hello")
+		assert(v.data == "planet")
+	})
+	t.Run("with-copy", func(t *testing.T) {
+		var m Map[string, *testCopyItem]
+		m.Set("hello", newTestCopyItem("world"))
+
+		m2 := m.Copy()
+
+		v, _ := m.Get("hello")
+		assert(v.data == "world")
+		v, _ = m2.Get("hello")
+		assert(v.data == "world")
+
+		// now get and change the value, mutable, this will only affect the
+		// first tree.
+		v, _ = m.GetMut("hello")
+		v.data = "planet"
+
+		v, _ = m.Get("hello")
+		assert(v.data == "planet")
+		v, _ = m2.Get("hello")
+		assert(v.data == "world")
+	})
+	t.Run("with-isocopy", func(t *testing.T) {
+		var m Map[string, *testIsoCopyItem]
+		m.Set("hello", newTestIsoCopyItem("world"))
+
+		m2 := m.Copy()
+
+		v, _ := m.Get("hello")
+		assert(v.data == "world")
+		v, _ = m2.Get("hello")
+		assert(v.data == "world")
+
+		// now get and change the value, mutable, this will only affect the
+		// first tree.
+		v, _ = m.GetMut("hello")
+		v.data = "planet"
+
+		v, _ = m.Get("hello")
+		assert(v.data == "planet")
+		v, _ = m2.Get("hello")
+		assert(v.data == "world")
+	})
+
+}
+
+func TestMapDeepCopy(t *testing.T) {
+
+	Ncols := 1000
+	Nvals := 1000
+
+	// Create a collection of maps that are each a collection of key/value
+	// pairs of string.
+	cols1 := NewMap[string, *Map[string, string]](4)
+	for i := 0; i < Ncols; i++ {
+		col := NewMap[string, string](4)
+		for j := 0; j < Nvals; j++ {
+			col.Set(fmt.Sprintf("key:%d", j), fmt.Sprintf("val:%d", j))
+		}
+		cols1.Set(fmt.Sprintf("col:%d", i), col)
+	}
+
+	// Copy the root tree
+
+	cols2 := cols1.Copy()
+
+	// Update the second cols2 by deleting half the entries
+	for i := 0; i < Ncols; i++ {
+		col, _ := cols2.GetMut(fmt.Sprintf("col:%d", i))
+		for j := 0; j < Nvals; j += 2 {
+			col.Delete(fmt.Sprintf("key:%d", j))
+		}
+	}
+
+	// Now Count the total of keys in all collections
+	var count1 int
+	for i := 0; i < Ncols; i++ {
+		col, _ := cols1.Get(fmt.Sprintf("col:%d", i))
+		count1 += col.Len()
+	}
+
+	var count2 int
+	for i := 0; i < Ncols; i++ {
+		col, _ := cols2.Get(fmt.Sprintf("col:%d", i))
+		count2 += col.Len()
+	}
+
+	assert(count1 == Ncols*Nvals)
+	assert(count2 == Ncols*Nvals/2)
+
+	// Copy again, but this time use Get instead of GetMut
+	cols2 = cols1.Copy()
+
+	// Update the second cols2 by deleting half the entries
+	for i := 0; i < Ncols; i++ {
+		col, _ := cols2.Get(fmt.Sprintf("col:%d", i))
+		for j := 0; j < Nvals; j += 2 {
+			col.Delete(fmt.Sprintf("key:%d", j))
+		}
+	}
+
+	// Now Count the total of keys in all collections
+	count1 = 0
+	for i := 0; i < Ncols; i++ {
+		col, _ := cols1.Get(fmt.Sprintf("col:%d", i))
+		count1 += col.Len()
+	}
+
+	count2 = 0
+	for i := 0; i < Ncols; i++ {
+		col, _ := cols2.Get(fmt.Sprintf("col:%d", i))
+		count2 += col.Len()
+	}
+	assert(count1 == Ncols*Nvals/2)
+	assert(count2 == Ncols*Nvals/2)
 }

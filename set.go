@@ -11,6 +11,12 @@ func (tr *Set[K]) Copy() *Set[K] {
 	return tr2
 }
 
+func (tr *Set[K]) IsoCopy() *Set[K] {
+	tr2 := new(Set[K])
+	tr2.base = *tr.base.IsoCopy()
+	return tr2
+}
+
 // Insert an item
 func (tr *Set[K]) Insert(key K) {
 	tr.base.Set(key, struct{}{})
