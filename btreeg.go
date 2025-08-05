@@ -697,13 +697,13 @@ type DeleteRangeOptions struct {
 // Returns the deleted items as an ordered list that can be iterated over using
 // the list.Scan() method.
 func (tr *BTreeG[T]) DeleteRange(min, max T, opts *DeleteRangeOptions) (deleted List[T]) {
-	return tr.DeleteRangeUnsafe(min, max, opts, List[T]{})
+	return tr.DeleteRangeReuse(min, max, opts, List[T]{})
 }
 
-// DeleteRangeUnsafe is the same as DeleteRange, but it takes a List as an argument to
+// DeleteRangeReuse is the same as DeleteRange, but it takes a List as an argument to
 // avoid allocating/growing a new List on each call to DeleteRange. It is unsafe to use
 // the same List across concurrent calls to DeleteRange.
-func (tr *BTreeG[T]) DeleteRangeUnsafe(min, max T, opts *DeleteRangeOptions, deleted List[T]) List[T] {
+func (tr *BTreeG[T]) DeleteRangeReuse(min, max T, opts *DeleteRangeOptions, deleted List[T]) List[T] {
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
