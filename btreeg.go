@@ -675,6 +675,13 @@ func (e *List[T]) Scan(iter func(item T) bool) {
 	}
 }
 
+func (e *List[T]) Clear() {
+	e.less = nil
+	e.q = e.q[:0]
+	e.count = 0
+	e.np = 0
+}
+
 // Options for passing to the DeleteRange function
 type DeleteRangeOptions struct {
 	// Do not return the deleted items.
@@ -689,14 +696,22 @@ type DeleteRangeOptions struct {
 // max (exclusive) sub-range.
 // Returns the deleted items as an ordered list that can be iterated over using
 // the list.Scan() method.
-func (tr *BTreeG[T]) DeleteRange(min, max T, opts *DeleteRangeOptions) (
-	deleted List[T],
-) {
+func (tr *BTreeG[T]) DeleteRange(min, max T, opts *DeleteRangeOptions) (deleted List[T]) {
+	return tr.DeleteRangeReuse(min, max, opts, List[T]{})
+}
+
+// DeleteRangeReuse is the same as DeleteRange, but it takes a List as an argument to
+// avoid allocating/growing a new List on each call to DeleteRange. It is unsafe to use
+// the same List across concurrent calls to DeleteRange.
+func (tr *BTreeG[T]) DeleteRangeReuse(min, max T, opts *DeleteRangeOptions, deleted List[T]) List[T] {
 	if tr.lock(true) {
 		defer tr.unlock(true)
 	}
 	extract := opts == nil || !opts.NoReturn
 	maxincl := opts != nil && opts.MaxInclusive
+	// Clear just in case it hasn't been cleared yet.
+	deleted.Clear()
+
 	maxstop := func(item T) bool {
 		if maxincl {
 			return tr.less(max, item)
@@ -715,7 +730,7 @@ func (tr *BTreeG[T]) DeleteRange(min, max T, opts *DeleteRangeOptions) (
 	var stack []stackItem
 restart:
 	if tr.root == nil {
-		return
+		return deleted
 	}
 	n := tr.isoLoad(&tr.root, true)
 	stack = append(stack, stackItem{n, 0})
@@ -751,7 +766,7 @@ restart:
 			if found {
 				if maxstop(n.items[i]) {
 					// stop
-					return
+					return deleted
 				}
 				pivot = n.items[i]
 				if extract {
@@ -790,13 +805,13 @@ restart:
 			}
 			tr.count -= j
 			if stop {
-				return
+				return deleted
 			}
 		}
 		for ; i < len(n.items); i++ {
 			if maxstop(n.items[i]) {
 				// stop
-				return
+				return deleted
 			}
 			if len(n.items) > tr.min {
 				if extract {
@@ -826,7 +841,7 @@ restart:
 			stack = stack[:len(stack)-1]
 			if len(stack) == 0 {
 				// end of tree
-				return
+				return deleted
 			}
 			n = stack[len(stack)-1].node
 			if i < len(n.items) {
