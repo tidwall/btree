@@ -1585,6 +1585,7 @@ func (tr *BTreeG[T]) IterNoAlloc(iter *IterG[T]) *IterG[T] {
 
 	iter.tr = tr
 	iter.mut = false
+	iter.locked = tr.lock(iter.mut)
 	iter.stack = iter.stack0[:0]
 	return iter
 }
