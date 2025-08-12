@@ -1580,6 +1580,16 @@ func (tr *BTreeG[T]) Iter() IterG[T] {
 	return tr.iter(false)
 }
 
+func (tr *BTreeG[T]) IterNoAlloc(iter *IterG[T]) *IterG[T] {
+	*iter = IterG[T]{}
+
+	iter.tr = tr
+	iter.mut = false
+	iter.locked = tr.lock(iter.mut)
+	iter.stack = iter.stack0[:0]
+	return iter
+}
+
 func (tr *BTreeG[T]) IterMut() IterG[T] {
 	return tr.iter(true)
 }
