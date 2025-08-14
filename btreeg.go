@@ -1564,9 +1564,22 @@ type IterG[T any] struct {
 	seeked  bool
 	atstart bool
 	atend   bool
-	stack0  [4]iterStackItemG[T]
-	stack   []iterStackItemG[T]
+	nstack  int
+	stack   [32]iterStackItemG[T]
 	item    T
+}
+
+func (iter *IterG[T]) pushStack(item iterStackItemG[T]) {
+	iter.stack[iter.nstack] = item
+	iter.nstack++
+}
+
+func (iter *IterG[T]) popStack() {
+	iter.nstack--
+}
+
+func (iter *IterG[T]) resetStack() {
+	iter.nstack = 0
 }
 
 type iterStackItemG[T any] struct {
@@ -1589,7 +1602,6 @@ func (tr *BTreeG[T]) iter(mut bool) IterG[T] {
 	iter.tr = tr
 	iter.mut = mut
 	iter.locked = tr.lock(iter.mut)
-	iter.stack = iter.stack0[:0]
 	return iter
 }
 
@@ -1608,7 +1620,7 @@ func (iter *IterG[T]) seek(key T, hint *PathHint) bool {
 		return false
 	}
 	iter.seeked = true
-	iter.stack = iter.stack[:0]
+	iter.resetStack()
 	if iter.tr.root == nil {
 		return false
 	}
@@ -1616,13 +1628,13 @@ func (iter *IterG[T]) seek(key T, hint *PathHint) bool {
 	var depth int
 	for {
 		i, found := iter.tr.find(n, key, hint, depth)
-		iter.stack = append(iter.stack, iterStackItemG[T]{n, i})
+		iter.pushStack(iterStackItemG[T]{n, i})
 		if found {
 			iter.item = n.items[i]
 			return true
 		}
 		if n.leaf() {
-			iter.stack[len(iter.stack)-1].i--
+			iter.stack[iter.nstack-1].i--
 			return iter.Next()
 		}
 		n = iter.tr.isoLoad(&(*n.children)[i], iter.mut)
@@ -1639,19 +1651,19 @@ func (iter *IterG[T]) First() bool {
 	iter.atend = false
 	iter.atstart = false
 	iter.seeked = true
-	iter.stack = iter.stack[:0]
+	iter.resetStack()
 	if iter.tr.root == nil {
 		return false
 	}
 	n := iter.tr.isoLoad(&iter.tr.root, iter.mut)
 	for {
-		iter.stack = append(iter.stack, iterStackItemG[T]{n, 0})
+		iter.pushStack(iterStackItemG[T]{n, 0})
 		if n.leaf() {
 			break
 		}
 		n = iter.tr.isoLoad(&(*n.children)[0], iter.mut)
 	}
-	s := &iter.stack[len(iter.stack)-1]
+	s := &iter.stack[iter.nstack-1]
 	iter.item = s.n.items[s.i]
 	return true
 }
@@ -1663,20 +1675,20 @@ func (iter *IterG[T]) Last() bool {
 		return false
 	}
 	iter.seeked = true
-	iter.stack = iter.stack[:0]
+	iter.resetStack()
 	if iter.tr.root == nil {
 		return false
 	}
 	n := iter.tr.isoLoad(&iter.tr.root, iter.mut)
 	for {
-		iter.stack = append(iter.stack, iterStackItemG[T]{n, len(n.items)})
+		iter.pushStack(iterStackItemG[T]{n, len(n.items)})
 		if n.leaf() {
-			iter.stack[len(iter.stack)-1].i--
+			iter.stack[iter.nstack-1].i--
 			break
 		}
 		n = iter.tr.isoLoad(&(*n.children)[len(n.items)], iter.mut)
 	}
-	s := &iter.stack[len(iter.stack)-1]
+	s := &iter.stack[iter.nstack-1]
 	iter.item = s.n.items[s.i]
 	return true
 }
@@ -1690,7 +1702,6 @@ func (iter *IterG[T]) Release() {
 		iter.tr.unlock(iter.mut)
 		iter.locked = false
 	}
-	iter.stack = nil
 	iter.tr = nil
 }
 
@@ -1704,23 +1715,23 @@ func (iter *IterG[T]) Next() bool {
 	if !iter.seeked {
 		return iter.First()
 	}
-	if len(iter.stack) == 0 {
+	if iter.nstack == 0 {
 		if iter.atstart {
 			return iter.First() && iter.Next()
 		}
 		return false
 	}
-	s := &iter.stack[len(iter.stack)-1]
+	s := &iter.stack[iter.nstack-1]
 	s.i++
 	if s.n.leaf() {
 		if s.i == len(s.n.items) {
 			for {
-				iter.stack = iter.stack[:len(iter.stack)-1]
-				if len(iter.stack) == 0 {
+				iter.popStack()
+				if iter.nstack == 0 {
 					iter.atend = true
 					return false
 				}
-				s = &iter.stack[len(iter.stack)-1]
+				s = &iter.stack[iter.nstack-1]
 				if s.i < len(s.n.items) {
 					break
 				}
@@ -1729,14 +1740,14 @@ func (iter *IterG[T]) Next() bool {
 	} else {
 		n := iter.tr.isoLoad(&(*s.n.children)[s.i], iter.mut)
 		for {
-			iter.stack = append(iter.stack, iterStackItemG[T]{n, 0})
+			iter.pushStack(iterStackItemG[T]{n, 0})
 			if n.leaf() {
 				break
 			}
 			n = iter.tr.isoLoad(&(*n.children)[0], iter.mut)
 		}
 	}
-	s = &iter.stack[len(iter.stack)-1]
+	s = &iter.stack[iter.nstack-1]
 	iter.item = s.n.items[s.i]
 	return true
 }
@@ -1751,23 +1762,23 @@ func (iter *IterG[T]) Prev() bool {
 	if !iter.seeked {
 		return false
 	}
-	if len(iter.stack) == 0 {
+	if iter.nstack == 0 {
 		if iter.atend {
 			return iter.Last() && iter.Prev()
 		}
 		return false
 	}
-	s := &iter.stack[len(iter.stack)-1]
+	s := &iter.stack[iter.nstack-1]
 	if s.n.leaf() {
 		s.i--
 		if s.i == -1 {
 			for {
-				iter.stack = iter.stack[:len(iter.stack)-1]
-				if len(iter.stack) == 0 {
+				iter.popStack()
+				if iter.nstack == 0 {
 					iter.atstart = true
 					return false
 				}
-				s = &iter.stack[len(iter.stack)-1]
+				s = &iter.stack[iter.nstack-1]
 				s.i--
 				if s.i > -1 {
 					break
@@ -1777,15 +1788,15 @@ func (iter *IterG[T]) Prev() bool {
 	} else {
 		n := iter.tr.isoLoad(&(*s.n.children)[s.i], iter.mut)
 		for {
-			iter.stack = append(iter.stack, iterStackItemG[T]{n, len(n.items)})
+			iter.pushStack(iterStackItemG[T]{n, len(n.items)})
 			if n.leaf() {
-				iter.stack[len(iter.stack)-1].i--
+				iter.stack[iter.nstack-1].i--
 				break
 			}
 			n = iter.tr.isoLoad(&(*n.children)[len(n.items)], iter.mut)
 		}
 	}
-	s = &iter.stack[len(iter.stack)-1]
+	s = &iter.stack[iter.nstack-1]
 	iter.item = s.n.items[s.i]
 	return true
 }
