@@ -1872,3 +1872,62 @@ func TestContiguousDeleteRangeLoad(t *testing.T) {
 	)
 
 }
+
+type largeItem struct {
+	a uint64
+	b uint64
+	c uint64
+	d uint64
+}
+
+func useIterator(iter IterG[largeItem]) {
+	iter.Seek(largeItem{a: 0})
+	defer iter.ReleaseReuseable()
+
+	// Iterate over 10 items beginning the seeked item.
+	assert(iter.Item().a == 0)
+}
+
+func useIteratorPointer(iter *IterG[largeItem]) {
+	iter.Seek(largeItem{a: 0})
+	defer iter.ReleaseReuseable()
+
+	assert(iter.Item().a == 0)
+}
+
+// This benchmark proves that there exist cases where the iterator creation can
+// cause an allocation
+func BenchmarkIteratorCreationAlloc(b *testing.B) {
+	tr := NewBTreeG(func(a, b largeItem) bool {
+		return a.a < b.a
+	})
+
+	for i := 0; i < 1; i++ {
+		tr.Set(largeItem{a: uint64(i * 2), b: uint64(i * 2), c: uint64(i * 2), d: uint64(i * 2)})
+	}
+
+	iter := tr.Iter()
+	iter.Seek(largeItem{a: 0})
+	assert(iter.Item().a == 0)
+
+	// The following will cause 1 allocation per op.
+	b.Run("no reuse", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			iter := tr.Iter()
+			useIterator(iter)
+		}
+	})
+
+	// The following will cause 0 allocations per op.
+	reusableIter := tr.Iter()
+	reusableIterPointer := &reusableIter
+
+	b.Run("reuse", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			reusableIterPointer.Init(tr, false)
+			useIteratorPointer(reusableIterPointer)
+		}
+	})
+}
