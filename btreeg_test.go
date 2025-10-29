@@ -1897,6 +1897,8 @@ func useIteratorPointer(iter *IterG[largeItem]) {
 
 // This benchmark proves that there exist cases where the iterator creation can
 // cause an allocation
+//
+// Run using: go test -run=^$ -bench ^BenchmarkIteratorCreationAlloc$ github.com/tidwall/btree
 func BenchmarkIteratorCreationAlloc(b *testing.B) {
 	tr := NewBTreeG(func(a, b largeItem) bool {
 		return a.a < b.a
