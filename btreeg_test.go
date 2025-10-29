@@ -1910,7 +1910,10 @@ func BenchmarkIteratorCreationAlloc(b *testing.B) {
 	iter.Seek(largeItem{a: 0})
 	assert(iter.Item().a == 0)
 
-	// The following will cause 1 allocation per op.
+	// The following will cause 1 allocation per op. Note that this allocation is not due
+	// to iter.stack slice allocating to grow larger. The benchmark is only performing a
+	// single seek, and the btree only has 1 item. The allocation is due to the iterator
+	// escaping to the heap.
 	b.Run("no reuse", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
@@ -1919,10 +1922,10 @@ func BenchmarkIteratorCreationAlloc(b *testing.B) {
 		}
 	})
 
-	// The following will cause 0 allocations per op.
 	reusableIter := tr.Iter()
 	reusableIterPointer := &reusableIter
 
+	// The following will cause 0 allocations per op, since a re-usable iterator is used.
 	b.Run("reuse", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
