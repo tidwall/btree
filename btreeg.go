@@ -1580,16 +1580,6 @@ func (tr *BTreeG[T]) Iter() IterG[T] {
 	return tr.iter(false)
 }
 
-func (tr *BTreeG[T]) IterNoAlloc(iter *IterG[T]) *IterG[T] {
-	*iter = IterG[T]{}
-
-	iter.tr = tr
-	iter.mut = false
-	iter.locked = tr.lock(iter.mut)
-	iter.stack = iter.stack0[:0]
-	return iter
-}
-
 func (tr *BTreeG[T]) IterMut() IterG[T] {
 	return tr.iter(true)
 }
@@ -1701,6 +1691,20 @@ func (iter *IterG[T]) Release() {
 		iter.locked = false
 	}
 	iter.stack = nil
+	iter.tr = nil
+}
+
+// ReleaseReuseable is the same as Release, but it preserves the iterator stack
+// so that the iterator can be reused without allocating.
+func (iter *IterG[T]) ReleaseReuseable() {
+	if iter.tr == nil {
+		return
+	}
+	if iter.locked {
+		iter.tr.unlock(iter.mut)
+		iter.locked = false
+	}
+	iter.stack = iter.stack[:0]
 	iter.tr = nil
 }
 
