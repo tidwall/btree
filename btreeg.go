@@ -1716,12 +1716,18 @@ func (iter *IterG[T]) ReleaseReuseable() {
 func (iter *IterG[T]) Init(tr *BTreeG[T], mut bool) {
 	iter.tr = tr
 	iter.mut = mut
+
 	iter.locked = tr.lock(iter.mut)
 	if iter.stack == nil {
 		iter.stack = iter.stack0[:0]
 	} else {
 		iter.stack = iter.stack[:0]
 	}
+
+	iter.seeked = false
+	iter.atstart = false
+	iter.atend = false
+	iter.item = tr.empty
 }
 
 // Next moves iterator to the next item in iterator.

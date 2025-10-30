@@ -1936,3 +1936,49 @@ func BenchmarkIteratorCreationAlloc(b *testing.B) {
 		}
 	})
 }
+
+// Ensure that the re-usable iterator works as expected even if the tree
+// is receiving new writes after every iteration.
+func TestBenchmarkIteratorReuseWorks(t *testing.T) {
+	tr := NewBTreeGOptions(func(a, b largeItem) bool {
+		return a.a < b.a
+	}, Options{
+		NoLocks: true,
+	})
+
+	tr.Set(largeItem{a: 0, b: 0, c: 0, d: 0})
+	iter := tr.Iter()
+	reusableIter := &iter
+
+	found := reusableIter.Seek(largeItem{a: 0})
+	assert(found)
+	assert(reusableIter.Item().a == 0)
+	reusableIter.ReleaseReuseable()
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	for i := 1; i < 10000; i++ {
+		// Insert a single item. Reset iterator, randomly seek b/w 0 to i, and ensure that the
+		// iterator is seeing the expected items.
+		tr.Set(largeItem{a: uint64(i), b: uint64(i), c: uint64(i), d: uint64(i)})
+
+		seekTo := rng.Intn(i + 1)
+
+		// Reset the iterator.
+		reusableIter.Init(tr, false)
+
+		// Seek to the random position.
+		found = reusableIter.Seek(largeItem{a: uint64(seekTo)})
+		assert(found)
+
+		nextExpectedItem := uint64(seekTo) + 1
+		for iter.Next() {
+			assert(iter.Item().a == nextExpectedItem)
+			nextExpectedItem++
+		}
+
+		assert(nextExpectedItem == uint64(i)+1)
+
+		reusableIter.ReleaseReuseable()
+	}
+}
