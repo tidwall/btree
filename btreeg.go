@@ -1717,7 +1717,6 @@ func (iter *IterG[T]) ReleaseReuseable() {
 // been called on the iterator before re-using it using Init.
 func (iter *IterG[T]) Init(tr *BTreeG[T]) {
 	iter.tr = tr
-	iter.mut = false
 	iter.locked = tr.lock(iter.mut)
 	if iter.stack == nil {
 		iter.stack = iter.stack0[:0]
