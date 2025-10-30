@@ -334,7 +334,7 @@ func BenchmarkIteratorCreationAlloc(b *testing.B) {
 	b.Run("reuse", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			reusableIterPointer.Init(tr)
+			reusableIterPointer.Init(tr, false)
 			useIteratorPointer(reusableIterPointer)
 		}
 	})
@@ -368,7 +368,7 @@ func TestBenchmarkIteratorReuseWorks(t *testing.T) {
 		seekTo := rng.Intn(i + 1)
 
 		// Reset the iterator.
-		reusableIter.Init(tr)
+		reusableIter.Init(tr, false)
 
 		// Seek to the random position.
 		found = reusableIter.Seek(largeItem{a: uint64(seekTo)})
