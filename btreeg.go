@@ -1713,15 +1713,6 @@ func (iter *IterG[T]) ReleaseReuseable() {
 	iter.tr = nil
 }
 
-func (tr *BTreeG[T]) iter(mut bool) IterG[T] {
-	var iter IterG[T]
-	iter.tr = tr
-	iter.mut = mut
-	iter.locked = tr.lock(iter.mut)
-	iter.stack = iter.stack0[:0]
-	return iter
-}
-
 // Init is used to initialize an existing iterator with a new tree. ReleaseReusable must've
 // been called on the iterator before re-using it using Init.
 func (iter *IterG[T]) Init(tr *BTreeG[T], mut bool) {
