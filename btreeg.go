@@ -1690,30 +1690,22 @@ func (iter *IterG[T]) Release() {
 		iter.tr.unlock(iter.mut)
 		iter.locked = false
 	}
-	iter.stack = nil
-	iter.tr = nil
-}
-
-// ReleaseReuseable is the same as Release, but it preserves the iterator stack
-// so that the iterator can be reused using Init without allocating.
-func (iter *IterG[T]) ReleaseReuseable() {
-	if iter.tr == nil {
-		return
-	}
-	if iter.locked {
-		iter.tr.unlock(iter.mut)
-		iter.locked = false
-	}
 
 	// Preserve the backing memory for the stack, so that the iterator can be re-used without
 	// allocating.
-	iter.stack = iter.stack[:0]
-	iter.tr = nil
+	stack := iter.stack[:0]
+	*iter = IterG[T]{}
+	iter.stack = stack
 }
 
-// Init is used to initialize an existing iterator with a new tree. ReleaseReusable must've
+// Init is used to initialize an existing iterator with a new tree. Release must've
 // been called on the iterator before re-using it using Init.
 func (iter *IterG[T]) Init(tr *BTreeG[T], mut bool) {
+	// Re-use the stack, but 0 out the rest of the memory.
+	stack := iter.stack[:0]
+	*iter = IterG[T]{}
+	iter.stack = stack
+
 	iter.tr = tr
 	iter.mut = mut
 
@@ -1723,11 +1715,6 @@ func (iter *IterG[T]) Init(tr *BTreeG[T], mut bool) {
 	} else {
 		iter.stack = iter.stack[:0]
 	}
-
-	iter.seeked = false
-	iter.atstart = false
-	iter.atend = false
-	iter.item = tr.empty
 }
 
 // Next moves iterator to the next item in iterator.

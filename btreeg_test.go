@@ -1882,7 +1882,7 @@ type largeItem struct {
 
 func useIterator(iter IterG[largeItem]) {
 	iter.Seek(largeItem{a: 0})
-	defer iter.ReleaseReuseable()
+	defer iter.Release()
 
 	// Iterate over 10 items beginning the seeked item.
 	assert(iter.Item().a == 0)
@@ -1890,7 +1890,7 @@ func useIterator(iter IterG[largeItem]) {
 
 func useIteratorPointer(iter *IterG[largeItem]) {
 	iter.Seek(largeItem{a: 0})
-	defer iter.ReleaseReuseable()
+	defer iter.Release()
 
 	assert(iter.Item().a == 0)
 }
@@ -1953,7 +1953,7 @@ func TestBenchmarkIteratorReuseWorks(t *testing.T) {
 	found := reusableIter.Seek(largeItem{a: 0})
 	assert(found)
 	assert(reusableIter.Item().a == 0)
-	reusableIter.ReleaseReuseable()
+	reusableIter.Release()
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
@@ -1979,6 +1979,6 @@ func TestBenchmarkIteratorReuseWorks(t *testing.T) {
 
 		assert(nextExpectedItem == uint64(i)+1)
 
-		reusableIter.ReleaseReuseable()
+		reusableIter.Release()
 	}
 }
