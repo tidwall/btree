@@ -116,7 +116,7 @@ func (tr *BTree) DeleteHint(key any, hint *PathHint) (prev any) {
 	if key == nil {
 		return nil
 	}
-	v, ok := tr.base.DeleteHint(key, nil)
+	v, ok := tr.base.DeleteHint(key, hint)
 	if !ok {
 		return nil
 	}

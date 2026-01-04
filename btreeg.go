@@ -57,8 +57,10 @@ func NewBTreeG[T any](less func(a, b T) bool) *BTreeG[T] {
 func NewBTreeGOptions[T any](less func(a, b T) bool, opts Options) *BTreeG[T] {
 	tr := new(BTreeG[T])
 	tr.isoid = newIsoID()
-	tr.mu = new(sync.RWMutex)
 	tr.locks = !opts.NoLocks
+	if tr.locks {
+		tr.mu = new(sync.RWMutex)
+	}
 	tr.less = less
 	tr.init(opts.Degree)
 	if opts.ReadOnly {
@@ -105,7 +107,7 @@ func (n *node[T]) leaf() bool {
 func (tr *BTreeG[T]) bsearch(n *node[T], key T) (index int, found bool) {
 	low, high := 0, len(n.items)
 	for low < high {
-		h := (low + high) / 2
+		h := int(uint(low+high) >> 1) // avoid overflow when computing h
 		if !tr.less(key, n.items[h]) {
 			low = h + 1
 		} else {
@@ -437,6 +439,438 @@ func (tr *BTreeG[T]) getHint(key T, hint *PathHint, mut bool) (T, bool) {
 		}
 		n = tr.isoLoad(&(*n.children)[i], mut)
 		depth++
+	}
+}
+
+// Action for DeleteAscend
+type Action int
+
+const (
+	Stop Action = iota
+	Keep
+	Delete
+)
+
+// DeleteAscend ascends over tree within the range [pivot, last].
+// Return Delete to delete the item.
+// Return Keep to keep the item, avoiding deletion.
+// Return Stop to stop iterating
+func (tr *BTreeG[T]) DeleteAscend(pivot T, iter func(item T) Action) {
+	if tr.lock(true) {
+		defer tr.unlock(true)
+	}
+	var hint PathHint
+	type stackItem struct {
+		node  *node[T]
+		index int
+	}
+	var stack []stackItem
+restart:
+	if tr.root == nil {
+		return
+	}
+	n := tr.isoLoad(&tr.root, true)
+	stack = append(stack, stackItem{n, 0})
+	for {
+		i, found := tr.find(n, pivot, &hint, len(stack)-1)
+	next:
+		if n.children != nil {
+			if found {
+				act := iter(n.items[i])
+				switch act {
+				case Delete:
+					pivot = n.items[i]
+					tr.deleteHint(n.items[i], &hint)
+					stack = stack[:0]
+					goto restart
+				case Keep:
+					n = tr.isoLoad(&(*n.children)[i+1], true)
+					stack = append(stack, stackItem{n, i + 1})
+					i = 0
+					for !n.leaf() {
+						n = tr.isoLoad(&(*n.children)[i], true)
+						stack = append(stack, stackItem{n, i})
+					}
+				default:
+					// user stop requested
+					return
+				}
+			} else {
+				// at branch, continue to leaf
+				n = tr.isoLoad(&(*n.children)[i], true)
+				stack = append(stack, stackItem{n, i})
+				continue
+			}
+		}
+		// at leaf
+		maxbulk := len(n.items) - i - tr.min
+		if maxbulk > 1 {
+			var act Action
+			j := 0
+			for ; j < maxbulk; j++ {
+				act = iter(n.items[i+j])
+				if act != Delete {
+					break
+				}
+			}
+			copy(n.items[i:], n.items[i+j:])
+			for k := len(n.items) - j; k < len(n.items); k++ {
+				n.items[k] = tr.empty
+			}
+			n.items = n.items[:len(n.items)-j]
+			for k := 0; k < len(stack); k++ {
+				stack[k].node.count -= j
+			}
+			tr.count -= j
+			if act == Stop {
+				return
+			}
+			if act == Keep {
+				i++
+			}
+		}
+		for ; i < len(n.items); i++ {
+			act := iter(n.items[i])
+			switch act {
+			case Delete:
+				if len(n.items) > tr.min {
+					copy(n.items[i:], n.items[i+1:])
+					n.items[len(n.items)-1] = tr.empty
+					n.items = n.items[:len(n.items)-1]
+					for j := 0; j < len(stack); j++ {
+						stack[j].node.count--
+					}
+					tr.count--
+					i--
+				} else {
+					pivot = n.items[i]
+					tr.deleteHint(n.items[i], &hint)
+					stack = stack[:0]
+					goto restart
+				}
+			case Keep:
+			default:
+				// user stop requested
+				return
+			}
+		}
+		// end of leaf items. traverse upwards
+		for {
+			i = stack[len(stack)-1].index
+			stack = stack[:len(stack)-1]
+			if len(stack) == 0 {
+				// end of tree
+				return
+			}
+			n = stack[len(stack)-1].node
+			if i < len(n.items) {
+				found = true
+				goto next
+			}
+		}
+	}
+}
+
+type eitem[T any] struct {
+	item T
+	node *node[T]
+}
+
+// List of deleted items from the DeleteRange function.
+type List[T any] struct {
+	less  func(a, b T) bool // comparator
+	count int               // total number of items
+	np    int               // number of pop eitems
+	q     []eitem[T]        // priority queue or reversed/popped array
+}
+
+func (e *List[T]) push(eitem eitem[T]) {
+	e.q = append(e.q, eitem)
+	i := len(e.q) - 1
+	parent := (i - 1) / 2
+	for i != 0 && e.less(e.q[i].item, e.q[parent].item) {
+		e.q[parent], e.q[i] = e.q[i], e.q[parent]
+		i = parent
+		parent = (i - 1) / 2
+	}
+}
+
+func (e *List[T]) pop() (eitem[T], bool) {
+	if len(e.q) == 0 {
+		return eitem[T]{}, false
+	}
+	var n eitem[T]
+	n, e.q[0] = e.q[0], e.q[len(e.q)-1]
+	e.q = e.q[:len(e.q)-1]
+	i := 0
+	for {
+		smallest := i
+		left := i*2 + 1
+		right := i*2 + 2
+		if left < len(e.q) && !e.less(e.q[smallest].item, e.q[left].item) {
+			smallest = left
+		}
+		if right < len(e.q) && !e.less(e.q[smallest].item, e.q[right].item) {
+			smallest = right
+		}
+		if smallest == i {
+			break
+		}
+		e.q[smallest], e.q[i] = e.q[i], e.q[smallest]
+		i = smallest
+	}
+	return n, true
+}
+
+func (e *List[T]) append(item T, n *node[T]) {
+	e.count++
+	if n != nil {
+		e.count += n.count
+	}
+	e.push(eitem[T]{item, n})
+}
+
+func extractNodeScan[T any](n *node[T], iter func(item T) bool) bool {
+	if n.leaf() {
+		for i := 0; i < len(n.items); i++ {
+			if !iter(n.items[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	for i := 0; i < len(n.items); i++ {
+		if !extractNodeScan((*n.children)[i], iter) {
+			return false
+		}
+		if !iter(n.items[i]) {
+			return false
+		}
+	}
+	return extractNodeScan((*n.children)[len(*n.children)-1], iter)
+}
+
+// Len returns the number of items in the list
+func (e *List[T]) Len() int {
+	return e.count
+}
+
+// Scan performs an ordered scan of all items in the list.
+func (e *List[T]) Scan(iter func(item T) bool) {
+	pitems := e.q[:cap(e.q)]
+	for i := 0; i < e.np; i++ {
+		eitem := pitems[cap(pitems)-i-1]
+		if !iter(eitem.item) {
+			return
+		}
+		if eitem.node != nil {
+			if !extractNodeScan(eitem.node, iter) {
+				return
+			}
+		}
+	}
+	for {
+		// pop the next item
+		eitem, ok := e.pop()
+		if !ok {
+			return
+		}
+		// Place item in reverse order for the extract can be scanned again.
+		e.q[:cap(e.q)][cap(e.q)-e.np-1] = eitem
+		e.np++
+		if !iter(eitem.item) {
+			return
+		}
+		if eitem.node != nil {
+			if !extractNodeScan(eitem.node, iter) {
+				return
+			}
+		}
+	}
+}
+
+func (e *List[T]) Clear() {
+	e.less = nil
+	e.q = e.q[:0]
+	e.count = 0
+	e.np = 0
+}
+
+// Options for passing to the DeleteRange function
+type DeleteRangeOptions struct {
+	// Do not return the deleted items.
+	// Default false
+	NoReturn bool
+	// Make the max inclusive.
+	// Default false
+	MaxInclusive bool
+}
+
+// DeleteRange will delete all items within the provided min (inclusive) and
+// max (exclusive) sub-range.
+// Returns the deleted items as an ordered list that can be iterated over using
+// the list.Scan() method.
+func (tr *BTreeG[T]) DeleteRange(min, max T, opts *DeleteRangeOptions) (deleted List[T]) {
+	return tr.DeleteRangeReuse(min, max, opts, &deleted)
+}
+
+// DeleteRangeReuse is the same as DeleteRange, but it takes a List as an argument to
+// avoid allocating/growing a new List on each call to DeleteRange. It is unsafe to use
+// the same List across concurrent calls to DeleteRange.
+//
+// The deleted paramter needs to be a pointer as the go runtime can allocate a new backing memory on
+// append to a slice, and that change needs to be reflected in the caller.
+func (tr *BTreeG[T]) DeleteRangeReuse(min, max T, opts *DeleteRangeOptions, deleted *List[T]) List[T] {
+	if tr.lock(true) {
+		defer tr.unlock(true)
+	}
+	extract := opts == nil || !opts.NoReturn
+	maxincl := opts != nil && opts.MaxInclusive
+
+	if deleted == nil {
+		deleted = &List[T]{}
+	}
+
+	// Clear just in case it hasn't been cleared yet.
+	deleted.Clear()
+
+	maxstop := func(item T) bool {
+		if maxincl {
+			return tr.less(max, item)
+		}
+		return !tr.less(item, max)
+	}
+	if extract {
+		deleted.less = tr.less
+	}
+	var hint PathHint
+	type stackItem struct {
+		node  *node[T]
+		index int
+	}
+	pivot := min
+	var stack []stackItem
+restart:
+	if tr.root == nil {
+		return *deleted
+	}
+	n := tr.isoLoad(&tr.root, true)
+	stack = append(stack, stackItem{n, 0})
+	for {
+		i, found := tr.find(n, pivot, &hint, len(stack)-1)
+	next:
+		if n.children != nil {
+			// Can the item and child to the right be completely deleted?
+			if i < len(n.items)-1 && (len(n.items) > tr.min ||
+				(len(n.items) > 1 && len(stack) == 1)) &&
+				tr.less(n.items[i+1], max) {
+				// Yes, delete both without traversing
+				ditem := n.items[i]
+				copy(n.items[i:], n.items[i+1:])
+				n.items[len(n.items)-1] = tr.empty
+				n.items = n.items[:len(n.items)-1]
+				dnode := (*n.children)[i+1]
+				copy((*n.children)[i+1:], (*n.children)[i+2:])
+				(*n.children)[len(*n.children)-1] = nil
+				*n.children = (*n.children)[:len(*n.children)-1]
+				for k := 0; k < len(stack); k++ {
+					stack[k].node.count -= dnode.count + 1
+				}
+				tr.count -= dnode.count + 1
+				if extract {
+					deleted.append(ditem, dnode)
+				}
+				if found {
+					goto next
+				}
+				continue
+			}
+			if found {
+				if maxstop(n.items[i]) {
+					// stop
+					return *deleted
+				}
+				pivot = n.items[i]
+				if extract {
+					deleted.append(n.items[i], nil)
+				}
+				tr.deleteHint(n.items[i], &hint)
+				stack = stack[:0]
+				goto restart
+			}
+			// at branch, continue to leaf
+			n = tr.isoLoad(&(*n.children)[i], true)
+			stack = append(stack, stackItem{n, i})
+			continue
+		}
+		// at leaf
+		maxbulk := len(n.items) - i - tr.min
+		if maxbulk > 1 {
+			var stop bool
+			j := 0
+			for ; j < maxbulk; j++ {
+				stop := maxstop(n.items[i+j])
+				if stop {
+					break
+				}
+				if extract {
+					deleted.append(n.items[i+j], nil)
+				}
+			}
+			copy(n.items[i:], n.items[i+j:])
+			for k := len(n.items) - j; k < len(n.items); k++ {
+				n.items[k] = tr.empty
+			}
+			n.items = n.items[:len(n.items)-j]
+			for k := 0; k < len(stack); k++ {
+				stack[k].node.count -= j
+			}
+			tr.count -= j
+			if stop {
+				return *deleted
+			}
+		}
+		for ; i < len(n.items); i++ {
+			if maxstop(n.items[i]) {
+				// stop
+				return *deleted
+			}
+			if len(n.items) > tr.min {
+				if extract {
+					deleted.append(n.items[i], nil)
+				}
+				copy(n.items[i:], n.items[i+1:])
+				n.items[len(n.items)-1] = tr.empty
+				n.items = n.items[:len(n.items)-1]
+				for j := 0; j < len(stack); j++ {
+					stack[j].node.count--
+				}
+				tr.count--
+				i--
+			} else {
+				pivot = n.items[i]
+				if extract {
+					deleted.append(n.items[i], nil)
+				}
+				tr.deleteHint(n.items[i], &hint)
+				stack = stack[:0]
+				goto restart
+			}
+		}
+		// end of leaf items. traverse upwards
+		for {
+			i = stack[len(stack)-1].index
+			stack = stack[:len(stack)-1]
+			if len(stack) == 0 {
+				// end of tree
+				return *deleted
+			}
+			n = stack[len(stack)-1].node
+			if i < len(n.items) {
+				found = true
+				goto next
+			}
+		}
 	}
 }
 
@@ -1119,7 +1553,9 @@ func (tr *BTreeG[T]) Copy() *BTreeG[T] {
 }
 
 func (tr *BTreeG[T]) IsoCopy() *BTreeG[T] {
+  var mu *sync.RWMutex
 	if tr.lock(!tr.readOnly) {
+    mu = new(sync.RWMutex)
 		defer tr.unlock(!tr.readOnly)
 	}
 	if !tr.readOnly {
@@ -1127,7 +1563,7 @@ func (tr *BTreeG[T]) IsoCopy() *BTreeG[T] {
 	}
 	tr2 := new(BTreeG[T])
 	*tr2 = *tr
-	tr2.mu = new(sync.RWMutex)
+	tr2.mu = mu
 	tr2.isoid = newIsoID()
 	tr2.readOnly = false
 	return tr2
@@ -1286,8 +1722,31 @@ func (iter *IterG[T]) Release() {
 		iter.tr.unlock(iter.mut)
 		iter.locked = false
 	}
-	iter.stack = nil
-	iter.tr = nil
+
+	// Preserve the backing memory for the stack, so that the iterator can be re-used without
+	// allocating.
+	stack := iter.stack[:0]
+	*iter = IterG[T]{}
+	iter.stack = stack
+}
+
+// Init is used to initialize an existing iterator with a new tree. Release must've
+// been called on the iterator before re-using it using Init.
+func (iter *IterG[T]) Init(tr *BTreeG[T], mut bool) {
+	// Re-use the stack, but 0 out the rest of the memory.
+	stack := iter.stack[:0]
+	*iter = IterG[T]{}
+	iter.stack = stack
+
+	iter.tr = tr
+	iter.mut = mut
+
+	iter.locked = tr.lock(iter.mut)
+	if iter.stack == nil {
+		iter.stack = iter.stack0[:0]
+	} else {
+		iter.stack = iter.stack[:0]
+	}
 }
 
 // Next moves iterator to the next item in iterator.
