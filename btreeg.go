@@ -1553,7 +1553,7 @@ func (tr *BTreeG[T]) Copy() *BTreeG[T] {
 }
 
 func (tr *BTreeG[T]) IsoCopy() *BTreeG[T] {
-  var mu *sync.RWMutex
+	var mu *sync.RWMutex
 	if tr.lock(!tr.readOnly) {
 		mu = new(sync.RWMutex)
 		defer tr.unlock(!tr.readOnly)
