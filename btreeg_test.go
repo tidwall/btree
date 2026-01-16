@@ -75,6 +75,12 @@ func kindsAreEqual(a, b []testKind) bool {
 	return true
 }
 
+func TestDegreeToMinMax(t *testing.T) {
+	if min, max := degreeToMinMax(1); min != 1 || max != 3 {
+		panic("mismatch")
+	}
+}
+
 func TestGenericMakeItemOrder(t *testing.T) {
 	tr := testNewBTree()
 	ints := []int{0, 1, 2, 3, 4, 10, 20, 30, 40, 100, 200, 300, 400}
