@@ -1691,25 +1691,33 @@ func (iter *IterG[T]) Release() {
 		iter.locked = false
 	}
 
-	// Preserve the backing memory for the stack, so that the iterator can be re-used without
-	// allocating.
-	stack := iter.stack[:0]
-	*iter = IterG[T]{}
-	iter.stack = stack
+	// Preserve stack backing array for reuse. Clear fields manually to avoid heap escape.
+	iter.stack = iter.stack[:0]
+	iter.tr = nil
+	iter.mut = false
+	iter.seeked = false
+	iter.atstart = false
+	iter.atend = false
+	var empty T
+	iter.item = empty
 }
 
 // Init is used to initialize an existing iterator with a new tree. Release must've
 // been called on the iterator before re-using it using Init.
 func (iter *IterG[T]) Init(tr *BTreeG[T], mut bool) {
-	// Re-use the stack, but 0 out the rest of the memory.
-	stack := iter.stack[:0]
-	*iter = IterG[T]{}
-	iter.stack = stack
-
+	// Reuse stack and clear fields manually to avoid struct copy overhead.
+	iter.stack = iter.stack[:0]
 	iter.tr = tr
 	iter.mut = mut
-
-	iter.locked = tr.lock(iter.mut)
+	iter.seeked = false
+	iter.atstart = false
+	iter.atend = false
+	iter.locked = false
+	if tr != nil {
+		iter.locked = tr.lock(iter.mut)
+	}
+	var empty T
+	iter.item = empty
 	if iter.stack == nil {
 		iter.stack = iter.stack0[:0]
 	} else {
