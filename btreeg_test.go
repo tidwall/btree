@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"runtime"
 	"sort"
 	"strconv"
@@ -1895,6 +1896,28 @@ func useIteratorPointer(iter *IterG[largeItem]) {
 	assert(iter.Item().a == 0)
 }
 
+func assertIteratorCleared[T any](t *testing.T, iter IterG[T]) {
+	t.Helper()
+	v := reflect.ValueOf(iter)
+	vt := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		name := vt.Field(i).Name
+		switch name {
+		case "stack", "stack0":
+			continue
+		}
+		if !v.Field(i).IsZero() {
+			t.Fatalf("iterator field %s was not reset", name)
+		}
+	}
+	if len(iter.stack) != 0 {
+		t.Fatal("iterator stack length not reset")
+	}
+	if cap(iter.stack) == 0 {
+		t.Fatal("iterator stack capacity should be preserved for reuse")
+	}
+}
+
 // This benchmark proves that there exist cases where the iterator creation can
 // cause an allocation
 //
@@ -1993,13 +2016,7 @@ func TestGenericIteratorRelease(t *testing.T) {
 		panic("!")
 	}
 	iter.Release()
-	if iter.tr != nil || iter.locked || iter.mut || iter.seeked ||
-		iter.atstart || iter.atend || len(iter.stack) != 0 {
-		panic("!")
-	}
-	if cap(iter.stack) == 0 {
-		panic("!")
-	}
+	assertIteratorCleared(t, iter)
 }
 
 func TestGenericIteratorInit(t *testing.T) {
@@ -2029,7 +2046,8 @@ func TestGenericIteratorInit(t *testing.T) {
 	if count != 50 {
 		panic("!")
 	}
-	iter.Release()
+	iter.Init(nil, false)
+	assertIteratorCleared(t, iter)
 }
 
 func TestGenericIteratorReuse(t *testing.T) {
