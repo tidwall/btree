@@ -194,14 +194,10 @@ path_match:
 
 // SetHint sets or replace a value for a key using a path hint
 func (tr *BTreeG[T]) SetHint(item T, hint *PathHint) (prev T, replaced bool) {
-	if tr.locks {
-		tr.mu.Lock()
-		prev, replaced = tr.setHint(item, hint)
-		tr.mu.Unlock()
-	} else {
-		prev, replaced = tr.setHint(item, hint)
+	if tr.lock(true) {
+		defer tr.mu.Unlock()
 	}
-	return prev, replaced
+	return tr.setHint(item, hint)
 }
 
 func (tr *BTreeG[T]) setHint(item T, hint *PathHint) (prev T, replaced bool) {
