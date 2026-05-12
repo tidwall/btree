@@ -1,3 +1,5 @@
+**Due to recent spikes in bot activity, the Issues and Pull Requests tabs have been disabled. For priority support, contact me directly.**
+
 # btree
 
 [![GoDoc](https://godoc.org/github.com/tidwall/btree?status.svg)](https://godoc.org/github.com/tidwall/btree)
