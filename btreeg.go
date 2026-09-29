@@ -795,7 +795,7 @@ restart:
 			var stop bool
 			j := 0
 			for ; j < maxbulk; j++ {
-				stop := maxstop(n.items[i+j])
+				stop = maxstop(n.items[i+j])
 				if stop {
 					break
 				}
