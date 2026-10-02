@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"reflect"
 	"runtime"
 	"sort"
 	"strconv"
@@ -1895,6 +1896,28 @@ func useIteratorPointer(iter *IterG[largeItem]) {
 	assert(iter.Item().a == 0)
 }
 
+func assertIteratorCleared[T any](t *testing.T, iter IterG[T]) {
+	t.Helper()
+	v := reflect.ValueOf(iter)
+	vt := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		name := vt.Field(i).Name
+		switch name {
+		case "stack", "stack0":
+			continue
+		}
+		if !v.Field(i).IsZero() {
+			t.Fatalf("iterator field %s was not reset", name)
+		}
+	}
+	if len(iter.stack) != 0 {
+		t.Fatal("iterator stack length not reset")
+	}
+	if cap(iter.stack) == 0 {
+		t.Fatal("iterator stack capacity should be preserved for reuse")
+	}
+}
+
 // This benchmark proves that there exist cases where the iterator creation can
 // cause an allocation
 //
@@ -1981,4 +2004,122 @@ func TestBenchmarkIteratorReuseWorks(t *testing.T) {
 
 		reusableIter.Release()
 	}
+}
+
+func TestGenericIteratorRelease(t *testing.T) {
+	tr := testNewBTree()
+	for i := 0; i < 100; i++ {
+		tr.Set(testMakeItem(i))
+	}
+	iter := tr.Iter()
+	if !iter.First() || !tr.eq(iter.Item(), testMakeItem(0)) {
+		panic("!")
+	}
+	iter.Release()
+	assertIteratorCleared(t, iter)
+}
+
+func TestGenericIteratorInit(t *testing.T) {
+	tr := testNewBTree()
+	for i := 0; i < 50; i++ {
+		tr.Set(testMakeItem(i * 2))
+	}
+	iter := tr.Iter()
+	if !iter.First() || !tr.eq(iter.Item(), testMakeItem(0)) {
+		panic("!")
+	}
+	iter.Release()
+	iter.Init(tr, false)
+	if iter.tr == nil || iter.mut || iter.seeked || len(iter.stack) != 0 {
+		panic("!")
+	}
+	if !iter.First() || !tr.eq(iter.Item(), testMakeItem(0)) {
+		panic("!")
+	}
+	count := 1
+	for iter.Next() {
+		if !tr.eq(iter.Item(), testMakeItem(count*2)) {
+			panic("!")
+		}
+		count++
+	}
+	if count != 50 {
+		panic("!")
+	}
+	iter.Init(nil, false)
+	assertIteratorCleared(t, iter)
+}
+
+func TestGenericIteratorReuse(t *testing.T) {
+	tr := testNewBTree()
+	for i := 0; i < 100; i++ {
+		tr.Set(testMakeItem(i))
+	}
+	iter := tr.Iter()
+	for round := 0; round < 1000; round++ {
+		iter.Init(tr, false)
+		if !iter.First() {
+			panic("!")
+		}
+		count := 0
+		for {
+			if !tr.eq(iter.Item(), testMakeItem(count)) {
+				panic("!")
+			}
+			count++
+			if !iter.Next() {
+				break
+			}
+		}
+		if count != 100 {
+			panic("!")
+		}
+		iter.Release()
+	}
+}
+
+func BenchmarkIteratorRelease(b *testing.B) {
+	tr := NewBTreeG(testLess)
+	for i := 0; i < 10000; i++ {
+		tr.Set(testMakeItem(i))
+	}
+	iter := tr.Iter()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		iter.First()
+		iter.Release()
+		iter.Init(tr, false)
+	}
+}
+
+func BenchmarkIteratorReuse(b *testing.B) {
+	tr := NewBTreeG(testLess)
+	for i := 0; i < 1000; i++ {
+		tr.Set(testMakeItem(i))
+	}
+	b.Run("Recreate", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			iter := tr.Iter()
+			iter.First()
+			for iter.Next() {
+				_ = iter.Item()
+			}
+			iter.Release()
+		}
+	})
+	b.Run("Reuse", func(b *testing.B) {
+		iter := tr.Iter()
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			iter.Init(tr, false)
+			iter.First()
+			for iter.Next() {
+				_ = iter.Item()
+			}
+			iter.Release()
+		}
+	})
 }
