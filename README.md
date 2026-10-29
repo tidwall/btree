@@ -1,35 +1,9 @@
-<p align="center">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="/.github/logo-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="/.github/logo-light.png">
-  <img alt="B-tree" src="/.github/images/logo-light.png" width="640">
-</picture>
-<br>
-<a href="#map">Map</a> •
-<a href="#set">Set</a> •
-<a href="#array">Array</a> •
-<a href="#table">Table</a> •
-<a href="#stack">Stack</a> •
-<a href="#queue">Queue</a> • 
-<a href="#deque">Deque</a> •
-<a href="#prique">Prique</a>
-<br>
-<br>
-<a href="https://godoc.org/github.com/tidwall/btree"
-><img src="https://godoc.org/github.com/tidwall/btree?status.svg"
-></a>
-</p>
+# btree
+
+[![GoDoc](https://godoc.org/github.com/tidwall/btree?status.svg)](https://godoc.org/github.com/tidwall/btree)
 
 The btree package provides btree based collection types that allow Go programmers 
 to easily implement common data structures like maps, arrays, queues, and stacks. 
-
-It's hand-crafted with performance in mind and is generally faster than the 
-state of the art btrees for Go, Rust, and C++.
-[google/btree](https://github.com/google/btree), 
-[tidwall/btree](https://github.com/tidwall/btree), 
-[rust/BTreeMap](https://doc.rust-lang.org/std/collections/struct.BTreeMap.html), 
-[frozenca/btree](https://github.com/frozenca/BTree).
-<sup>[[benchmarks]](#performance)</sup>
 
 # Features
 
