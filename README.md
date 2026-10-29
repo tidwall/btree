@@ -2,7 +2,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="/.github/logo-dark.png">
   <source media="(prefers-color-scheme: light)" srcset="/.github/logo-light.png">
-  <img alt="Tile38" src="/.github/images/logo-light.png" width="640">
+  <img alt="B-tree" src="/.github/images/logo-light.png" width="640">
 </picture>
 <br>
 <a href="#map">Map</a> •
@@ -363,11 +363,6 @@ func main() {
 ## Table
 
 btree.Table is a general purpose btree collection for storing sorted data.
-
-This collection type is functionally similar to 
-[`tidwall/btree.BTreeG`](https://pkg.go.dev/github.com/tidwall/btree#BTreeG) and
-[`google/btree.BTreeG`](https://pkg.go.dev/github.com/google/btree#BTreeG), 
-but includes additional features and performance enhancements.
 
 ### Features
 
