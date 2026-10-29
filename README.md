@@ -36,7 +36,7 @@ state of the art btrees for Go, Rust, and C++.
 - Includes collections types: map, set, queue, stack, table. Each backed by a btree structure.
 - Modern Go ergonomics with a friendly API.
 - All data operations are O(log n) complexity.
-- Instant [copy-on-write](#copy-on-write) (shadow clones), providing O(1) snapshots.
+- Instant copy-on-write (shadow clones), providing O(1) snapshots.
 - Uses [btree counting](https://www.chiark.greenend.org.uk/~sgtatham/algorithms/cbtree.html) for O(log n) random access.
 - Exhaustively tested code with 100% coverage.
 - Optimized for [high performance](#performance) and low memory.
