@@ -16,7 +16,7 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 - Optimized for [high performance](#performance) and low memory
 
 <details>
-  <summary>Major changes to be aware of when migrating from v1 to v2.</summary>
+  <summary><b>Major changes to be aware of when migrating from v1 to v2.</b></summary>
 
   - Callbacks iteration now uses the modern Go `iter.Seq`
   - Get() now returns one value. For the two value return use Lookup()
