@@ -6,13 +6,13 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 
 ## Features
 
-- Includes a variety of common [collections types](#types). All backed by a btree structure.
+- Includes a variety of common [collections types](#types). All backed by a btree structure
 - Modern Go ergonomics with a friendly API. Conforms to the Go [Generic collection types](https://github.com/golang/go/issues/80590) proposal
-- All data operations are [O(log n)](https://en.wikipedia.org/wiki/Time_complexity#Logarithmic_time) complexity.
-- Instant copy-on-write (shadow clones), providing O(1) snapshots.
-- Uses [btree counting](https://www.chiark.greenend.org.uk/~sgtatham/algorithms/cbtree.html) for O(log n) random access.
-- Exhaustively tested code with 100% coverage.
-- Optimized for [high performance](#performance) and low memory.
+- All data operations are [O(log n)](https://en.wikipedia.org/wiki/Time_complexity#Logarithmic_time) complexity
+- Instant copy-on-write (shadow clones), providing O(1) snapshots
+- Uses [btree counting](https://www.chiark.greenend.org.uk/~sgtatham/algorithms/cbtree.html) for O(log n) random access
+- Exhaustively tested code with 100% coverage
+- Optimized for [high performance](#performance) and low memory
 
 ## Types
 
