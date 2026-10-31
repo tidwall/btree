@@ -7,7 +7,11 @@
 // B-tree based collections for go
 package btree // import "github.com/tidwall/btree/v2"
 
-import "iter"
+import (
+	"fmt"
+	"iter"
+	"slices"
+)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Deque
@@ -195,5 +199,5 @@ func (b *Deque[T]) Contains(item T) bool {
 
 // String returns a string representation of queue.
 func (b *Deque[T]) String() string {
-	return "Deque[]"
+	return fmt.Sprintf("deque%v\n", slices.Collect(b.All()))
 }

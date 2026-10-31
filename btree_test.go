@@ -4557,14 +4557,214 @@ func TestMapGetAction(t *testing.T) {
 	assert(c.Len() == 0)
 }
 
-func TestAbstract(t *testing.T) {
-	var a Array[int]
-	a.PushBack(1)
-	a.PushBack(2)
-	a.PushBack(3)
-	a.PushBack(4)
+func vok[T any](v T, ok bool) T {
+	assert(ok)
+	return v
+}
 
-	println(a.Contains(1))
+func TestArray2(t *testing.T) {
+	var a Array[int]
+	for i := range 100 {
+		assert(a.Insert(a.Len(), i))
+		assert(a.Get(i) == i)
+		assert(a.GetMut(i) == i)
+		j, ok := a.Lookup(i)
+		assert(j == i)
+		assert(ok)
+		j, ok = a.LookupMut(i)
+		assert(j == i)
+		assert(ok)
+	}
+	assert(a.Contains(0))
+	assert(a.Contains(50))
+	assert(a.Contains(99))
+	assert(!a.Contains(100))
+	assert(a.Len() == 100)
+	assert(slices.Equal(slices.Collect(a.All()), slices.Collect(a.AllMut())))
+	assert(slices.Equal(slices.Collect(a.Backward()), slices.Collect(a.BackwardMut())))
+	assert(slices.Equal(slices.Collect(a.Ascend(50)), slices.Collect(a.AscendMut(50))))
+	assert(slices.Equal(slices.Collect(a.Descend(50)), slices.Collect(a.DescendMut(50))))
+	assert(vok(a.Front()) == vok(a.FrontMut()))
+	assert(vok(a.Back()) == vok(a.BackMut()))
+	assert(a.String() == fmt.Sprintf("array%v\n", slices.Collect(a.All())))
+}
+
+func TestDeque2(t *testing.T) {
+	var q Deque[int]
+	for i := range 100 {
+		q.PushBack(i)
+	}
+	assert(q.Contains(0))
+	assert(q.Contains(50))
+	assert(q.Contains(99))
+	assert(!q.Contains(100))
+	assert(q.String() == fmt.Sprintf("deque%v\n", slices.Collect(q.All())))
+
+}
+
+func TestMap2(t *testing.T) {
+	var m Map[string, int]
+	for i := range 100 {
+		m.Insert(fmt.Sprintf("k%020d", i), i)
+		assert(m.Get(fmt.Sprintf("k%020d", i)) == i)
+	}
+	k0, v0 := m.GetAt(50)
+	assert(k0 == fmt.Sprintf("k%020d", 50))
+	assert(v0 == 50)
+	k1, v1 := m.GetAtMut(50)
+	assert(k1 == fmt.Sprintf("k%020d", 50))
+	assert(v1 == 50)
+
+	m.DeleteFunc(func(k string, v int) bool {
+		return v%2 == 0
+	})
+	assert(m.Len() == 50)
+	assert(strings.Contains(m.String(), " k00000000000000000041:41 "))
+}
+
+func TestPrique2(t *testing.T) {
+	var q Prique[int]
+	for i := range 100 {
+		q.Push(i)
+	}
+	assert(q.GetAt(0) == 99)
+	assert(q.GetAt(99) == 0)
+	assert(q.GetAtMut(0) == 99)
+	assert(q.GetAtMut(99) == 0)
+	assert(q.Contains(50))
+	assert(!q.Contains(100))
+	assert(strings.Contains(q.String(), " 50 "))
+}
+
+func TestQueue2(t *testing.T) {
+	var q Queue[int]
+	for i := range 100 {
+		q.Push(i)
+	}
+	assert(q.Contains(50))
+	assert(!q.Contains(100))
+	assert(strings.Contains(q.String(), " 50 "))
+}
+
+func TestSet2(t *testing.T) {
+	var s Set[int]
+	for i := range 1000 {
+		s.Insert(i)
+		assert(s.GetAt(i) == i)
+	}
+	assert(s.Contains(500))
+	assert(!s.Contains(1000))
+	assert(strings.Contains(s.String(), " 500 "))
+
+	assert(s.Equal(&s))
+	s1 := s.Clone()
+	assert(s.Equal(s1))
+	s2 := s.Clone()
+	assert(s1.DeleteFunc(func(i int) bool {
+		return i%2 == 1
+	}) == true)
+	assert(s2.DeleteFunc(func(i int) bool {
+		return i%2 == 0
+	}) == true)
+	assert(!s.Equal(s1))
+	assert(!s.Equal(s2))
+	s3 := s1.Union(s2)
+	assert(s.Equal(s3))
+	s4 := s1.Difference(s2)
+	assert(s4.Equal(s1))
+	s4.DifferenceWith(s4)
+	assert(s4.Len() == 0)
+	s4 = s.Clone()
+	s4.DifferenceWith(s2)
+	assert(s4.Equal(s1))
+	s4 = s.Intersection(&s)
+	assert(s4.Equal(&s))
+	s4 = s1.Intersection(s2)
+	assert(s4.Len() == 0)
+	s5 := NewSet[int]()
+	s5.Insert(49)
+	s5.Insert(50)
+	s5.Insert(51)
+	s5.Insert(52)
+	s5.Insert(53)
+	s6 := s1.Intersection(s5)
+	assert(slices.Equal(slices.Collect(s6.All()), []int{50, 52}))
+	s7 := s.Clone()
+	s7.DifferenceWith(s1)
+	assert(s7.Equal(s2))
+	assert(s7.Intersects(s2))
+	assert(!s7.Intersects(s1))
+	assert(s7.Intersects(&s))
+	assert(s7.Intersects(s7))
+	s7.Clear()
+	assert(!s7.Intersects(s7))
+	s7 = s.Clone()
+	s7.IntersectionWith(s7)
+	assert(s7.Equal(&s))
+
+	s7.IntersectionWith(s1)
+	assert(s7.Equal(s1))
+	s7.IntersectionWith(s2)
+	assert(s7.Len() == 0)
+
+	s8 := s1.SymmetricDifference(s5)
+	assert(s8.Contains(48))
+	assert(s8.Contains(49))
+	assert(!s8.Contains(50))
+	assert(s8.Contains(51))
+	assert(!s8.Contains(52))
+	assert(s8.Contains(53))
+	assert(s8.Contains(54))
+	s9 := s8.Clone()
+	s8 = s1.SymmetricDifference(s1)
+	assert(s8.Len() == 0)
+	s8 = s1.Clone()
+	s8.SymmetricDifferenceWith(s8)
+	assert(s8.Len() == 0)
+	s8 = s1.Clone()
+	s8.SymmetricDifferenceWith(s5)
+	assert(s9.Equal(s8))
+
+}
+
+func TestStack2(t *testing.T) {
+	var q Stack[int]
+	for i := range 100 {
+		q.Push(i)
+	}
+	assert(!q.Contains(-1))
+	assert(q.Contains(0))
+	assert(q.Contains(1))
+	assert(q.Contains(98))
+	assert(q.Contains(99))
+	assert(!q.Contains(100))
+	assert(q.String() == fmt.Sprintf("stack%v", slices.Collect(q.All())))
+}
+
+func TestTable2(t *testing.T) {
+	var q Table[int]
+	for i := range 100 {
+		q.Insert(i)
+	}
+	assert(!q.Contains(-1))
+	assert(q.Contains(0))
+	assert(q.Contains(1))
+	assert(q.Contains(98))
+	assert(q.Contains(99))
+	assert(!q.Contains(100))
+	assert(q.Get(-1) == 0)
+	assert(q.Get(0) == 0)
+	assert(q.Get(1) == 1)
+	assert(q.Get(98) == 98)
+	assert(q.Get(99) == 99)
+	assert(q.Get(100) == 0)
+	assert(q.GetMut(-1) == 0)
+	assert(q.GetMut(0) == 0)
+	assert(q.GetMut(1) == 1)
+	assert(q.GetMut(98) == 98)
+	assert(q.GetMut(99) == 99)
+	assert(q.GetMut(100) == 0)
+	assert(q.String() == fmt.Sprintf("table%v", slices.Collect(q.All())))
 }
 
 //////////////////////////////////////////////////////////////////////////////

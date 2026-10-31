@@ -9,6 +9,7 @@ package btree // import "github.com/tidwall/btree/v2"
 
 import (
 	"cmp"
+	"fmt"
 	"iter"
 	"slices"
 )
@@ -149,28 +150,6 @@ func (b *Set[K]) PopBack() (K, bool) {
 	return key, ok
 }
 
-// PopFrontFunc removes first key if provided function allows
-func (b *Set[K]) PopFrontFunc(cond func(key K) bool) (K, bool) {
-	if cond == nil {
-		return b.PopFront()
-	}
-	key, _, ok := b.base.PopFrontFunc(func(key K, _ omit) bool {
-		return cond(key)
-	})
-	return key, ok
-}
-
-// PopBackFunc removes last key if provided function allows
-func (b *Set[K]) PopBackFunc(cond func(key K) bool) (K, bool) {
-	if cond == nil {
-		return b.PopBack()
-	}
-	key, _, ok := b.base.PopBackFunc(func(key K, _ omit) bool {
-		return cond(key)
-	})
-	return key, ok
-}
-
 // Front returns first key
 func (b *Set[K]) Front() (K, bool) {
 	key, _, ok := b.base.Front()
@@ -252,7 +231,7 @@ func (b *Set[K]) DrainBackward() iter.Seq[K] {
 
 // String representation
 func (b *Set[K]) String() string {
-	return "Set[]"
+	return fmt.Sprintf("set%v", slices.Collect(b.All()))
 }
 
 // Equal returs true if boths sets contains the same items
@@ -282,7 +261,7 @@ func (b *Set[K]) Equal(other *Set[K]) bool {
 		if !slices.Equal(g1, g2) {
 			return false
 		}
-		if start < group {
+		if len(g1) < group {
 			return true
 		}
 		start += group
@@ -296,11 +275,10 @@ func (b *Set[K]) DeleteFunc(del func(K) bool) bool {
 
 // UnionWith inserts all keys of other set.
 func (b *Set[K]) UnionWith(other *Set[K]) {
-	if b == other {
-		return
-	}
-	for k := range other.All() {
-		b.Insert(k)
+	if b != other {
+		for k := range other.All() {
+			b.Insert(k)
+		}
 	}
 }
 
@@ -357,7 +335,7 @@ func (b *Set[K]) IntersectionWith(other *Set[K]) {
 	if b == other {
 		return
 	}
-	for k := range b.All() {
+	for k := range b.Clone().All() {
 		if !other.Contains(k) {
 			b.Delete(k)
 		}

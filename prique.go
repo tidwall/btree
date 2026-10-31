@@ -9,7 +9,9 @@ package btree // import "github.com/tidwall/btree/v2"
 
 import (
 	"cmp"
+	"fmt"
 	"iter"
+	"slices"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -226,11 +228,20 @@ func (b *Prique[T]) Release() {
 }
 
 // Contains return true if item exists in queue
-func (b *Prique[T]) Contains(item T) bool {
-	return b.table.Contains(pqitem[T]{item, 0})
+func (b *Prique[T]) Contains(key T) bool {
+	keyA := pqitem[T]{key, 0}
+	v, ok := b.table.Seek(keyA)
+	if ok {
+		keyB := pqitem[T]{v.value, 0}
+		c := b.table.tree.dataCompare(omit{}, keyA, omit{}, keyB)
+		if c == 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // String returns a string representation of queue
 func (b *Prique[T]) String() string {
-	return "Prique[]"
+	return fmt.Sprintf("prique%v", slices.Collect(b.All()))
 }

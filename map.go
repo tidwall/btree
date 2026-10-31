@@ -9,6 +9,7 @@ package btree // import "github.com/tidwall/btree/v2"
 
 import (
 	"cmp"
+	"fmt"
 	"iter"
 	"unsafe"
 )
@@ -65,36 +66,10 @@ func mapSearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
 	return i, key == mapKeyAt(p, i)
 }
 
-func mapBinarySearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
-) (i int, found bool) {
-	keys := unsafe.Slice(p, len)
-	if key > keys[len-1] {
-		return len, false
-	}
-	low, high := 0, len
-	for low < high {
-		h := (low + high) >> 1
-		if !(key < keys[h]) {
-			low = h + 1
-		} else {
-			high = h
-		}
-	}
-	if low > 0 && !(keys[low-1] < key) {
-		return low - 1, true
-	}
-	return low, false
-}
-
 //go:noinline
 func (b *Map[K, V]) init0() {
 	if b.tree.dataCompare == nil {
 		b.tree.dataCompare = mapCompare
-		var key K
-		if _, ok := any(key).(string); ok {
-			// Use standard operations with binary search.
-			b.tree.dataSearch = mapBinarySearch
-		}
 	}
 	if b.tree.dataSearch == nil {
 		b.tree.dataSearch = mapSearch
@@ -856,7 +831,18 @@ func (b *Map[K, V]) DrainBackward() iter.Seq2[K, V] {
 
 // String returns a string representation of map
 func (b *Map[K, V]) String() string {
-	return "Map[]"
+	var s []byte
+	s = append(s, "map["...)
+	var i int
+	for k, v := range b.All() {
+		if i > 0 {
+			s = append(s, ' ')
+		}
+		s = fmt.Appendf(s, "%v:%v", k, v)
+		i++
+	}
+	s = append(s, "]"...)
+	return string(s)
 }
 
 // DeleteFunc delete item from map if its allowed by del function.

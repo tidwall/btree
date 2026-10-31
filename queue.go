@@ -7,7 +7,11 @@
 // B-tree based collections for go
 package btree // import "github.com/tidwall/btree/v2"
 
-import "iter"
+import (
+	"fmt"
+	"iter"
+	"slices"
+)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Queue
@@ -130,11 +134,6 @@ func (b *Queue[T]) Drain() iter.Seq[T] {
 	return iterV(b.tree.Drain())
 }
 
-// String representation of queue
-func (b *Queue[T]) String() string {
-	return "Queue[]"
-}
-
 // Contains returns true if item exists.
 func (b *Queue[T]) Contains(item T) bool {
 	cmp := CompareFor[T]()
@@ -144,4 +143,9 @@ func (b *Queue[T]) Contains(item T) bool {
 		}
 	}
 	return false
+}
+
+// String representation of queue
+func (b *Queue[T]) String() string {
+	return fmt.Sprintf("queue%v", slices.Collect(b.All()))
 }

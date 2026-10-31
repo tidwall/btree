@@ -7,7 +7,11 @@
 // B-tree based collections for go
 package btree // import "github.com/tidwall/btree/v2"
 
-import "iter"
+import (
+	"fmt"
+	"iter"
+	"slices"
+)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Stack
@@ -129,5 +133,5 @@ func (b *Stack[K]) Contains(item K) bool {
 }
 
 func (b *Stack[K]) String() string {
-	return "Stack[]"
+	return fmt.Sprintf("stack%v", slices.Collect(b.All()))
 }

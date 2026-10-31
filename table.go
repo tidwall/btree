@@ -9,6 +9,7 @@ package btree // import "github.com/tidwall/btree/v2"
 
 import (
 	"cmp"
+	"fmt"
 	"iter"
 	"math"
 	"reflect"
@@ -158,7 +159,7 @@ func (b *Table[T]) Contains(key T) bool {
 }
 
 func (b *Table[T]) String() string {
-	return "Table[]"
+	return fmt.Sprintf("table%v", slices.Collect(b.All()))
 }
 
 func (b *Table[T]) Lookup(key T) (T, bool) {

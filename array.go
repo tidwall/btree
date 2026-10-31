@@ -3,11 +3,15 @@
 // Copyright 2026 Joshua J Baker. All rights reserved.
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
-//
+
 // B-tree based collections for go
 package btree // import "github.com/tidwall/btree/v2"
 
-import "iter"
+import (
+	"fmt"
+	"iter"
+	"slices"
+)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Array
@@ -269,5 +273,5 @@ func (b *Array[T]) Contains(item T) bool {
 
 // String returns a string representation of array.
 func (b *Array[T]) String() string {
-	return "Array[]"
+	return fmt.Sprintf("array%v\n", slices.Collect(b.All()))
 }

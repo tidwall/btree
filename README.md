@@ -187,8 +187,6 @@ PopFront()              # Remove the first key
 PopBack()               # Remove the last key
 Front()                 # Get the first key
 Back()                  # Get the last key
-PopFrontFunc(cond)      # Remove first key if cond returns true
-PopBackFunc(cond)       # Remove last key if cond returns true
 
 InsertAt(i, key)        # Insert key at index. (collection size grows by one)
 ReplaceAt(i, key)       # Replace key at index
