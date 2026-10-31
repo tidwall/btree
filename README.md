@@ -4,7 +4,7 @@
 
 An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 
-# Features
+## Features
 
 - Includes a variety of common [collections types](#types). All backed by a btree structure.
 - Modern Go ergonomics with a friendly API.
@@ -14,9 +14,7 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 - Exhaustively tested code with 100% coverage.
 - Optimized for [high performance](#performance) and low memory.
 
-# Types
-
-Includes the following collection types:
+## Types
 
 - [`Map`](#map): Key value pairs. Sorting ordered by key
 - [`Set`](#set): Like Map, but only for storing keys. No values
@@ -26,7 +24,6 @@ Includes the following collection types:
 - [`Queue`](#queue): FIFO (first-in, first-out) data structure
 - [`Deque`](#deque): Double-ended queue
 - [`Prique`](#prique): Priority queue
-
 
 ## Using 
 
