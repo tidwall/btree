@@ -590,8 +590,8 @@ PopFront()              # Remove the first item.
 PopBack()               # Remove the last item.
 Front()                 # Get the first item.
 Back()                  # Get the last item.
-PopFrontFunc(cond)        # Remove first item if cond returns true.
-PopBackFunc(cond)         # Remove last item if cond returns true.
+PopFrontFunc(cond)      # Remove first item if cond returns true.
+PopBackFunc(cond)       # Remove last item if cond returns true.
 
 InsertAt(i, item)       # Inserts item at index. (collection size grows by one)
 ReplaceAt(i, item)      # Replace an item at index.
