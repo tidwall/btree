@@ -1,9 +1,17 @@
-package btree
+// https://github.com/tidwall/btree
+//
+// Copyright 2026 Joshua J Baker. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+//
+// B-tree based collections for go
+package btree // import "github.com/tidwall/btree/v2"
 
 import (
 	"bytes"
 	"cmp"
 	"fmt"
+	"iter"
 	"maps"
 	"math/rand/v2"
 	"os"
@@ -120,10 +128,10 @@ func TestMapBasic1(t *testing.T) {
 	for i, j := range rng.Perm(100000) {
 		key := j * 10
 
-		val, found := m.Get(key)
+		val, found := m.Lookup(key)
 		assert(!found && val == 0)
 
-		val, found = m.GetMut(key)
+		val, found = m.LookupMut(key)
 		assert(!found && val == 0)
 
 		assert(!m.Contains(key))
@@ -152,7 +160,7 @@ func TestMapBasic1(t *testing.T) {
 		old, replaced = m.Replace(key, -key)
 		assert(replaced && old == key)
 
-		val, found = m.Get(key)
+		val, found = m.Lookup(key)
 		assert(found && val == -key)
 
 		assert(m.Contains(key))
@@ -192,7 +200,7 @@ func TestMapBasic2(t *testing.T) {
 			t.Fatalf("expected %d got %d", i, c.Len())
 		}
 
-		val, found := c.Get(keys[i])
+		val, found := c.Lookup(keys[i])
 		assert(!found && val == 0)
 
 		val, inserted := c.Insert(keys[i], keys[i])
@@ -200,7 +208,7 @@ func TestMapBasic2(t *testing.T) {
 		assert(c.Len() == i+1)
 		c.tree.Sane(nil)
 
-		val, found = c.Get(keys[i])
+		val, found = c.Lookup(keys[i])
 		assert(found && val == keys[i])
 
 		val, deleted := c.Delete(keys[i])
@@ -228,27 +236,27 @@ func TestMapBasic2(t *testing.T) {
 		j, found := c.IndexOf(keys[i])
 		assert(found)
 
-		key, val, found := c.GetAt(j)
+		key, val, found := c.LookupAt(j)
 		assert(found && key == keys[i] && val == keys[i])
 	}
 	var key int
 	var val int
 	var found bool
-	key, val, found = c.GetAt(-1)
+	key, val, found = c.LookupAt(-1)
 	assert(!found && key == 0 && val == 0)
 
-	key, val, found = c.GetAt(N)
+	key, val, found = c.LookupAt(N)
 	assert(!found && key == 0 && val == 0)
 
 	for i := range N {
-		key, val, found := c.GetAt(i)
+		key, val, found := c.LookupAt(i)
 		assert(found && key == i && val == i)
 	}
 	// shuffle
 	keys = rng.Perm(N)
 
 	for i := range N {
-		val, found := c.Get(keys[i])
+		val, found := c.Lookup(keys[i])
 		assert(found && val == keys[i])
 
 		val, inserted := c.Insert(keys[i], -keys[i])
@@ -257,13 +265,13 @@ func TestMapBasic2(t *testing.T) {
 		val, replaced := c.Replace(keys[i], -keys[i])
 		assert(replaced && val == keys[i])
 
-		val, found = c.Get(keys[i])
+		val, found = c.Lookup(keys[i])
 		assert(found && val == -keys[i])
 		c.tree.Sane(nil)
 	}
 
 	for i := range N {
-		key, val, found := c.GetAt(i)
+		key, val, found := c.LookupAt(i)
 		assert(found && key == i && val == -i)
 	}
 
@@ -271,13 +279,13 @@ func TestMapBasic2(t *testing.T) {
 	keys = rng.Perm(N)
 
 	for i := range N {
-		val, found := c.Get(keys[i])
+		val, found := c.Lookup(keys[i])
 		assert(found && val == -keys[i])
 
 		val, deleted := c.Delete(keys[i])
 		assert(deleted && val == -keys[i])
 
-		val, found = c.Get(keys[i])
+		val, found = c.Lookup(keys[i])
 		assert(!found && val == 0)
 
 		val, deleted = c.Delete(keys[i])
@@ -578,7 +586,7 @@ func testMapDeleteRange(rng *rand.Rand, N int) time.Duration {
 	}
 
 	for _, key := range extracted {
-		_, ok := m.Get(key)
+		_, ok := m.Lookup(key)
 		assert(!ok)
 	}
 
@@ -763,7 +771,7 @@ func TestMapCOW(t *testing.T) {
 		}
 
 		for i := range n {
-			key, val, found := c.GetAtMut(i)
+			key, val, found := c.LookupAtMut(i)
 			assert(found)
 			if rng.Int()%2 == 0 {
 				val2, deleted := c.Delete(key)
@@ -772,10 +780,10 @@ func TestMapCOW(t *testing.T) {
 				val3, inserted := c.Insert(key, val)
 				assert(inserted && val3 == nil)
 			}
-			key2, val2, found := c.GetAt(i)
+			key2, val2, found := c.LookupAt(i)
 			assert(found && key2 == key && val2.value == val.value)
 
-			val3, found := c.GetMut(key2)
+			val3, found := c.LookupMut(key2)
 			assert(found && val3.value == val2.value)
 
 			key4, val4, found := c.FrontMut()
@@ -787,7 +795,7 @@ func TestMapCOW(t *testing.T) {
 			assert(val5.value == vals[len(vals)-1].value)
 
 		}
-		val, found := c.GetMut(-1)
+		val, found := c.LookupMut(-1)
 		assert(!found && val == nil)
 
 		c.tree.Sane(vempty)
@@ -804,10 +812,11 @@ func TestMapCOW(t *testing.T) {
 		assert(equals)
 
 		if n > 5 {
-			k0, v0, ok := c.GetAt(n / 3)
+			k0, v0, ok := c.LookupAt(n / 3)
 			assert(ok)
 			assert(v0.value == vals2[n/3].value)
-			k1, v1, ok := c.GetAt(n - n/3)
+			k1, v1, ok := c.LookupAt(n - n/3)
+			assert(ok)
 			assert(v1.value == vals2[n-n/3].value)
 
 			list := c.DeleteRange(k0, k1)
@@ -833,7 +842,7 @@ func TestMapCOW(t *testing.T) {
 		if depth > maxDepth {
 			return
 		}
-		c2 := c.Copy()
+		c2 := c.Clone()
 		wg.Add(2)
 		go deepTest(c2, depth)
 		deepTest(c, depth)
@@ -852,7 +861,7 @@ func TestMapCOWNoValueCopy(t *testing.T) {
 		assert(val == 0 && replaced == false)
 	}
 	m.tree.Sane(nil)
-	m2 := m.Copy()
+	m2 := m.Clone()
 	assert(slices.Equal(slices.Collect(m.Keys()), slices.Collect(m2.Keys())))
 	assert(slices.Equal(slices.Collect(m.Values()),
 		slices.Collect(m2.Values())))
@@ -860,7 +869,7 @@ func TestMapCOWNoValueCopy(t *testing.T) {
 	for i := range N {
 		val, replaced := m2.Set(i, -i)
 		assert(val == i && replaced == true)
-		val, found := m2.Get(i)
+		val, found := m2.Lookup(i)
 		assert(val == -i && found == true)
 	}
 
@@ -995,7 +1004,7 @@ func TestMapInsertAt(t *testing.T) {
 	}
 
 	for i := N - 1; i >= 0; i-- {
-		k, v, ok := m.GetAt(i)
+		k, v, ok := m.LookupAt(i)
 		assert(ok && k == v*10)
 		j, ok := m.IndexOf(k)
 		assert(ok && i == j)
@@ -1004,7 +1013,7 @@ func TestMapInsertAt(t *testing.T) {
 		if i > 0 {
 			assert(!m.InsertAt(j, k-1000000, v))
 		}
-		k2, v2, ok := m.GetAt(i)
+		k2, v2, ok := m.LookupAt(i)
 		assert(ok && k2 == k-1 && v2 == v)
 
 	}
@@ -1139,11 +1148,11 @@ func TestMapCOWDataRelease(t *testing.T) {
 		m.Set(key, value)
 	}
 
-	m2 := m.Copy()
+	m2 := m.Clone()
 	for i := range 50 {
 		key := i * 200
 		value := strconv.Itoa(key)
-		val, ok := m2.GetMut(key)
+		val, ok := m2.LookupMut(key)
 		assert(ok && val == value && values[value] == 2)
 	}
 	nvalues = len(values)
@@ -1173,15 +1182,15 @@ func TestMapStringKey(t *testing.T) {
 	var val int
 	var ok bool
 	for i := range N {
-		val, ok = m.Get(strconv.Itoa(i))
+		val, ok = m.Lookup(strconv.Itoa(i))
 		assert(!ok && val == 0)
 		val, ok = m.Insert(strconv.Itoa(i), i)
 		assert(ok && val == 0)
-		val, ok = m.Get(strconv.Itoa(i))
+		val, ok = m.Lookup(strconv.Itoa(i))
 		assert(ok && val == i)
 		val, ok = m.Insert(strconv.Itoa(i), -i)
 		assert(!ok && val == i)
-		val, ok = m.Get(strconv.Itoa(i))
+		val, ok = m.Lookup(strconv.Itoa(i))
 		assert(ok && val == i)
 		m.tree.Sane(nil)
 	}
@@ -1220,16 +1229,16 @@ func testBasic1String(t *testing.T, noprefix bool) {
 		// NoPrefix: noprefix,
 	})
 
-	val, ok := m.Get("")
+	val, ok := m.Lookup("")
 	assert(!ok && val == 0)
 
 	val, ok = m.Delete("")
 	assert(!ok && val == 0)
 
 	for h, i := range rng.Perm(N) {
-		val, ok := m.Get(itoa(i))
+		val, ok := m.Lookup(itoa(i))
 		assert(!ok && val == 0)
-		val, ok = m.GetMut(itoa(i))
+		val, ok = m.LookupMut(itoa(i))
 		assert(!ok && val == 0)
 		val, ok = m.Set(itoa(i), i)
 		assert(!ok && val == 0)
@@ -1241,7 +1250,7 @@ func testBasic1String(t *testing.T, noprefix bool) {
 	}
 	m.tree.Sane(nil)
 
-	m2 := m.Copy()
+	m2 := m.Clone()
 	// assert(m2.tree.strprefix == !noprefix)
 	assert(slices.Equal(slices.Collect(m.Keys()), slices.Collect(m2.Keys())))
 	assert(slices.Equal(slices.Collect(m.Values()), slices.Collect(m2.Values())))
@@ -1325,21 +1334,21 @@ func TestBigStringKeys(t *testing.T) {
 
 	for i := range 100000 {
 		key := fmt.Sprintf("%s:%d", prefix, i)
-		val, ok := m.Get(key)
+		val, ok := m.Lookup(key)
 		assert(!ok && val == 0)
-		val, ok = m.GetMut(key)
+		val, ok = m.LookupMut(key)
 		assert(!ok && val == 0)
 		val, ok = m.Delete(key)
 		assert(!ok && val == 0)
 		val, ok = m.Set(key, i)
 		assert(!ok && val == 0)
-		val, ok = m.Get(key)
+		val, ok = m.Lookup(key)
 		assert(ok && val == i)
-		val, ok = m.GetMut(key)
+		val, ok = m.LookupMut(key)
 		assert(ok && val == i)
 		val, ok = m.Set(key, -i)
 		assert(ok && val == i)
-		val, ok = m.Get(key)
+		val, ok = m.Lookup(key)
 		assert(ok && val == -i)
 		if i%301 == 0 {
 			m.tree.Sane(nil)
@@ -1372,7 +1381,7 @@ func TestSet(t *testing.T) {
 	s.base.tree.Sane(nil)
 
 	skeys := slices.Collect(s.All())
-	s2 := s.Copy()
+	s2 := s.Clone()
 
 	slices.Sort(keys)
 	slices.Reverse(keys)
@@ -1411,7 +1420,7 @@ func TestSet(t *testing.T) {
 		}
 	}
 
-	v1, ok := s.GetAt(5000)
+	v1, ok := s.LookupAt(5000)
 	assert(ok)
 	i, ok := s.IndexOf(v1)
 	assert(ok && i == 5000)
@@ -1421,25 +1430,25 @@ func TestSet(t *testing.T) {
 
 	v3, ok := s.SeekPrev(v1)
 	assert(ok)
-	v4, ok := s.GetAt(4999)
+	v4, ok := s.LookupAt(4999)
 	assert(ok && v3 == v4)
 
 	v3, ok = s.SeekNext(v1)
 	assert(ok)
-	v4, ok = s.GetAt(5001)
+	v4, ok = s.LookupAt(5001)
 	assert(ok && v3 == v4)
 
 	///
 
 	assert(s.InsertAt(5001, v1+1))
 	m[v1+1] = true
-	v1, ok = s.GetAt(2500)
+	v1, ok = s.LookupAt(2500)
 	assert(ok)
 	v2, ok = s.DeleteAt(2500)
 	assert(ok && v2 == v1)
 	delete(m, v2)
 
-	v3, ok = s.GetAt(2501)
+	v3, ok = s.LookupAt(2501)
 	assert(ok)
 	v4, ok = s.ReplaceAt(2501, v3+1)
 	assert(ok && v3 == v4)
@@ -1448,7 +1457,7 @@ func TestSet(t *testing.T) {
 
 	v1, ok = s.Front()
 	assert(ok)
-	v2, ok = s.GetAt(0)
+	v2, ok = s.LookupAt(0)
 	assert(ok && v1 == v2)
 	assert(s.PushFront(v1 - 1))
 	v2, ok = s.PopFront()
@@ -1456,7 +1465,7 @@ func TestSet(t *testing.T) {
 
 	v1, ok = s.Back()
 	assert(ok)
-	v2, ok = s.GetAt(len(m) - 1)
+	v2, ok = s.LookupAt(len(m) - 1)
 	assert(ok && v1 == v2)
 	assert(s.PushBack(v1 + 1))
 	v2, ok = s.PopBack()
@@ -1473,9 +1482,9 @@ func TestSet(t *testing.T) {
 		delete(m, dkeys[i])
 	}
 
-	k1, ok := s.GetAt(1000)
+	k1, ok := s.LookupAt(1000)
 	assert(ok)
-	k2, ok := s.GetAt(2000)
+	k2, ok := s.LookupAt(2000)
 	assert(ok)
 	deleted := slices.Collect(s.DeleteRange(k1, k2).All())
 	assert(len(deleted) == 1000 && slices.IsSorted(deleted))
@@ -1496,7 +1505,7 @@ func TestSet(t *testing.T) {
 	assert(s.Len() == 0)
 
 	assert(slices.Equal(skeys, slices.Collect(s2.All())))
-	s3 := s2.Copy()
+	s3 := s2.Clone()
 	s2.Release()
 	assert(s2.Len() == 0)
 	assert(slices.Equal(skeys, slices.Collect(s3.All())))
@@ -1515,7 +1524,7 @@ func TestSetDeleteRange(t *testing.T) {
 	b.base.tree.Sane(nil)
 	assert(b.Len() == 10000)
 
-	b2 := b.Copy()
+	b2 := b.Clone()
 
 	out := b.DeleteRange(1000, 6000)
 	assert(out.Len() == 5000)
@@ -1590,12 +1599,12 @@ func TestTable(t *testing.T) {
 	m := make(map[int]int)
 	for i := range len(keys) {
 		item := item[int]{keys[i], -keys[i]}
-		x, ok := b.Get(item)
+		x, ok := b.Lookup(item)
 		assert(!ok && x.empty())
 		x, ok = b.Insert(item)
 		assert(ok && x.empty())
 		m[item.key] = item.val
-		x, ok = b.Get(item)
+		x, ok = b.Lookup(item)
 		assert(ok && x.key == keys[i] && x.val == -keys[i])
 		if i%131 == 0 {
 			b.tree.Sane(isempty)
@@ -1642,10 +1651,10 @@ func testTableBasic1(t *testing.T, usecmp, useless bool) {
 	for i, j := range rng.Perm(100000) {
 		key := j * 10
 
-		val, found := m.Get(item{key, 0})
+		val, found := m.Lookup(item{key, 0})
 		assert(!found && val.val == 0)
 
-		val, found = m.GetMut(item{key, 0})
+		val, found = m.LookupMut(item{key, 0})
 		assert(!found && val.val == 0)
 
 		assert(!m.Contains(item{key, 0}))
@@ -1677,7 +1686,7 @@ func testTableBasic1(t *testing.T, usecmp, useless bool) {
 		old, replaced = m.Replace(item{key, -key})
 		assert(replaced && old.val == key)
 
-		val, found = m.Get(item{key, 0})
+		val, found = m.Lookup(item{key, 0})
 		assert(found && val.val == -key)
 
 		assert(m.Contains(item{key, 0}))
@@ -1742,7 +1751,7 @@ func TestTableBasic2(t *testing.T) {
 			t.Fatalf("expected %d got %d", i, c.Len())
 		}
 
-		val, found := c.Get(item{keys[i], 0})
+		val, found := c.Lookup(item{keys[i], 0})
 		assert(!found && val.val == 0)
 
 		val, inserted := c.Insert(item{keys[i], keys[i]})
@@ -1750,7 +1759,7 @@ func TestTableBasic2(t *testing.T) {
 		assert(c.Len() == i+1)
 		c.tree.Sane(nil)
 
-		val, found = c.Get(item{keys[i], 0})
+		val, found = c.Lookup(item{keys[i], 0})
 		assert(found && val.val == keys[i])
 
 		val, deleted := c.Delete(item{keys[i], 0})
@@ -1778,25 +1787,25 @@ func TestTableBasic2(t *testing.T) {
 		j, found := c.IndexOf(item{keys[i], 0})
 		assert(found)
 
-		val, found = c.GetAt(j)
+		val, found = c.LookupAt(j)
 		assert(found && val.key == keys[i] && val.val == keys[i])
 	}
 	var found bool
-	val, found := c.GetAt(-1)
+	val, found := c.LookupAt(-1)
 	assert(!found && val.key == 0 && val.val == 0)
 
-	val, found = c.GetAt(N)
+	val, found = c.LookupAt(N)
 	assert(!found && val.key == 0 && val.val == 0)
 
 	for i := range N {
-		val, found := c.GetAt(i)
+		val, found := c.LookupAt(i)
 		assert(found && val.key == i && val.val == i)
 	}
 	// shuffle
 	keys = rng.Perm(N)
 
 	for i := range N {
-		val, found := c.Get(item{keys[i], 0})
+		val, found := c.Lookup(item{keys[i], 0})
 		assert(found && val.val == keys[i])
 
 		val, inserted := c.Insert(item{keys[i], -keys[i]})
@@ -1805,13 +1814,13 @@ func TestTableBasic2(t *testing.T) {
 		val, replaced := c.Replace(item{keys[i], -keys[i]})
 		assert(replaced && val.val == keys[i])
 
-		val, found = c.Get(item{keys[i], 0})
+		val, found = c.Lookup(item{keys[i], 0})
 		assert(found && val.val == -keys[i])
 		c.tree.Sane(nil)
 	}
 
 	for i := range N {
-		val, found := c.GetAt(i)
+		val, found := c.LookupAt(i)
 		assert(found && val.key == i && val.val == -i)
 	}
 
@@ -1819,13 +1828,13 @@ func TestTableBasic2(t *testing.T) {
 	keys = rng.Perm(N)
 
 	for i := range N {
-		val, found := c.Get(item{keys[i], 0})
+		val, found := c.Lookup(item{keys[i], 0})
 		assert(found && val.val == -keys[i])
 
 		val, deleted := c.Delete(item{keys[i], 0})
 		assert(deleted && val.val == -keys[i])
 
-		val, found = c.Get(item{keys[i], 0})
+		val, found = c.Lookup(item{keys[i], 0})
 		assert(!found && val.val == 0)
 
 		val, deleted = c.Delete(item{keys[i], 0})
@@ -1940,9 +1949,9 @@ func testTableVarious[T numeric](_ *testing.T) {
 			assert(ok && v == i-1)
 		}
 
-		v, ok = b.GetAt(int(i))
+		v, ok = b.LookupAt(int(i))
 		assert(ok && v == i)
-		v, ok = b.GetAtMut(int(i))
+		v, ok = b.LookupAtMut(int(i))
 		assert(ok && v == i)
 	}
 
@@ -2028,7 +2037,7 @@ func TestTableDeleteRange(t *testing.T) {
 	b.tree.Sane(nil)
 	assert(b.Len() == 10000)
 
-	b2 := b.Copy()
+	b2 := b.Clone()
 
 	out := b.DeleteRange(1000, 6000)
 	assert(out.Len() == 5000)
@@ -2193,13 +2202,13 @@ func (a *dualList[T]) Insert(i int, item T) {
 	a.a = slices.Insert(a.a, i, item)
 	assert(a.b.Insert(i, item))
 	item0 := a.a[i]
-	item1, ok := a.b.Get(i)
+	item1, ok := a.b.Lookup(i)
 	assert(ok && item0 == item1)
 }
 
 func (a *dualList[T]) PushFront(item T) {
 	a.a = slices.Insert(a.a, 0, item)
-	assert(a.b.PushFront(item))
+	a.b.PushFront(item)
 	item0 := a.a[0]
 	item1, ok := a.b.Front()
 	assert(ok && item0 == item1)
@@ -2207,7 +2216,7 @@ func (a *dualList[T]) PushFront(item T) {
 func (a *dualList[T]) PushBack(item T) {
 	i := len(a.a)
 	a.a = slices.Insert(a.a, i, item)
-	assert(a.b.PushBack(item))
+	a.b.PushBack(item)
 	item0 := a.a[i]
 	item1, ok := a.b.Back()
 	assert(ok && item0 == item1)
@@ -2244,7 +2253,7 @@ func (a *dualList[T]) Copy() *dualList[T] {
 	b := new(dualList[T])
 	b.a = make([]T, len(a.a))
 	copy(b.a, a.a)
-	b.b = a.b.Copy()
+	b.b = a.b.Clone()
 	return b
 }
 
@@ -2255,7 +2264,7 @@ func TestList(t *testing.T) {
 	rng := rand.New(rand.NewPCG(0, seed))
 
 	var a dualList[int]
-	a.b = NewList[int]()
+	a.b = NewArray[int]()
 	for i := range 10000 {
 		switch rng.Int() % 100 {
 		case 0:
@@ -2411,9 +2420,9 @@ func TestStack(t *testing.T) {
 	assert(ok && x == 30)
 	assert(b.Len() == 2)
 
-	b2 := b.Copy()
+	b2 := b.Clone()
 	assert(b2.Len() == 2)
-	b3 := b.Copy()
+	b3 := b.Clone()
 	assert(b3.Len() == 2)
 
 	x, ok = b.Top()
@@ -2509,9 +2518,9 @@ func TestQueue(T *testing.T) {
 	assert(ok && x == 30)
 	assert(b.Len() == 2)
 
-	b2 := b.Copy()
+	b2 := b.Clone()
 	assert(b2.Len() == 2)
-	b3 := b.Copy()
+	b3 := b.Clone()
 	assert(b3.Len() == 2)
 
 	x, ok = b.Front()
@@ -3839,7 +3848,7 @@ func TestArrayDrain(t *testing.T) {
 	a1 := append([]int{}, a0...)
 	slices.Reverse(a1)
 	b0.Append(a0...)
-	b1 := b0.Copy()
+	b1 := b0.Clone()
 	assert(slices.Equal(a0, slices.Collect(b0.All())))
 	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
 	assert(b0.Len() == len(a0))
@@ -3863,7 +3872,7 @@ func TestMapDrain(t *testing.T) {
 	slices.Sort(a0)
 	a1 := append([]int{}, a0...)
 	slices.Reverse(a1)
-	b1 := b0.Copy()
+	b1 := b0.Clone()
 	assert(slices.Equal(a0, slices.Collect(iterK(b0.All()))))
 	assert(slices.Equal(a1, slices.Collect(iterK(b0.Backward()))))
 	assert(b0.Len() == len(a0))
@@ -3887,7 +3896,7 @@ func TestSetDrain(t *testing.T) {
 	slices.Sort(a0)
 	a1 := append([]int{}, a0...)
 	slices.Reverse(a1)
-	b1 := b0.Copy()
+	b1 := b0.Clone()
 	assert(slices.Equal(a0, slices.Collect(b0.All())))
 	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
 	assert(b0.Len() == len(a0))
@@ -3911,7 +3920,7 @@ func TestTableDrain(t *testing.T) {
 	slices.Sort(a0)
 	a1 := append([]int{}, a0...)
 	slices.Reverse(a1)
-	b1 := b0.Copy()
+	b1 := b0.Clone()
 	assert(slices.Equal(a0, slices.Collect(b0.All())))
 	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
 	assert(b0.Len() == len(a0))
@@ -3969,7 +3978,7 @@ func TestDequeDrain(t *testing.T) {
 	for _, key := range a0 {
 		b0.PushBack(key)
 	}
-	b1 := b0.Copy()
+	b1 := b0.Clone()
 	assert(slices.Equal(a0, slices.Collect(b0.All())))
 	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
 	assert(b0.Len() == len(a0))
@@ -4050,15 +4059,15 @@ func testPrique(t *testing.T, initopts int) {
 	var j int
 	for i := range 100 {
 		for range 3 {
-			item, ok := b.At(j)
+			item, ok := b.LookupAt(j)
 			assert(ok && item.key == 1000-i*10-10)
-			item, ok = b.AtMut(j)
+			item, ok = b.LookupAtMut(j)
 			assert(ok && item.key == 1000-i*10-10)
 			j++
 		}
 	}
 
-	b2 := b.Copy()
+	b2 := b.Clone()
 
 	item2, ok := b.Front()
 	for item := range b.All() {
@@ -4095,7 +4104,7 @@ func testPrique(t *testing.T, initopts int) {
 	item, ok = b2.Front()
 	assert(item.key == first.key && ok)
 
-	b3 := b2.Copy()
+	b3 := b2.Clone()
 
 	assert(b2.Len() == nitems)
 	item, ok = b2.Delete(ttt{key: 50})
@@ -4164,7 +4173,7 @@ func TestDeque(t *testing.T) {
 
 	assert(len(a) == b.Len())
 
-	b2 := b.Copy()
+	b2 := b.Clone()
 
 	assert(slices.Equal(a, slices.Collect(b.All())))
 	assert(slices.Equal(a, slices.Collect(b.AllMut())))
@@ -4220,34 +4229,34 @@ func TestTablePushBack(t *testing.T) {
 
 }
 
-func TestArrayPopIf(t *testing.T) {
+func TestArrayPopFunc(t *testing.T) {
 	var b Array[int]
 
 	for i := range 100 {
 		b.PushBack(i)
 	}
-	x, ok := b.PopFrontIf(nil)
+	x, ok := b.PopFrontFunc(nil)
 	assert(ok && x == 0)
-	x, ok = b.PopBackIf(nil)
+	x, ok = b.PopBackFunc(nil)
 	assert(ok && x == 99)
 
-	x, ok = b.PopFrontIf(func(x int) bool {
+	x, ok = b.PopFrontFunc(func(x int) bool {
 		assert(x == 1)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopFrontIf(func(x int) bool {
+	x, ok = b.PopFrontFunc(func(x int) bool {
 		assert(x == 1)
 		return true
 	})
 	assert(ok && x == 1)
 
-	x, ok = b.PopBackIf(func(x int) bool {
+	x, ok = b.PopBackFunc(func(x int) bool {
 		assert(x == 98)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopBackIf(func(x int) bool {
+	x, ok = b.PopBackFunc(func(x int) bool {
 		assert(x == 98)
 		return true
 	})
@@ -4255,19 +4264,19 @@ func TestArrayPopIf(t *testing.T) {
 
 }
 
-func TestQueuePopIf(t *testing.T) {
+func TestQueuePopFunc(t *testing.T) {
 	var b Queue[int]
 	for i := range 100 {
 		b.Push(i)
 	}
-	x, ok := b.PopIf(nil)
+	x, ok := b.PopFunc(nil)
 	assert(ok && x == 0)
-	x, ok = b.PopIf(func(x int) bool {
+	x, ok = b.PopFunc(func(x int) bool {
 		assert(x == 1)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopIf(func(x int) bool {
+	x, ok = b.PopFunc(func(x int) bool {
 		assert(x == 1)
 		return true
 	})
@@ -4275,34 +4284,34 @@ func TestQueuePopIf(t *testing.T) {
 
 }
 
-func TestTablePopIf(t *testing.T) {
+func TestTablePopFunc(t *testing.T) {
 	var b Table[int]
 
 	for i := range 100 {
 		b.PushBack(i)
 	}
-	x, ok := b.PopFrontIf(nil)
+	x, ok := b.PopFrontFunc(nil)
 	assert(ok && x == 0)
-	x, ok = b.PopBackIf(nil)
+	x, ok = b.PopBackFunc(nil)
 	assert(ok && x == 99)
 
-	x, ok = b.PopFrontIf(func(x int) bool {
+	x, ok = b.PopFrontFunc(func(x int) bool {
 		assert(x == 1)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopFrontIf(func(x int) bool {
+	x, ok = b.PopFrontFunc(func(x int) bool {
 		assert(x == 1)
 		return true
 	})
 	assert(ok && x == 1)
 
-	x, ok = b.PopBackIf(func(x int) bool {
+	x, ok = b.PopBackFunc(func(x int) bool {
 		assert(x == 98)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopBackIf(func(x int) bool {
+	x, ok = b.PopBackFunc(func(x int) bool {
 		assert(x == 98)
 		return true
 	})
@@ -4310,34 +4319,34 @@ func TestTablePopIf(t *testing.T) {
 
 }
 
-func TestDequePopIf(t *testing.T) {
+func TestDequePopFunc(t *testing.T) {
 	var b Deque[int]
 
 	for i := range 100 {
 		b.PushBack(i)
 	}
-	x, ok := b.PopFrontIf(nil)
+	x, ok := b.PopFrontFunc(nil)
 	assert(ok && x == 0)
-	x, ok = b.PopBackIf(nil)
+	x, ok = b.PopBackFunc(nil)
 	assert(ok && x == 99)
 
-	x, ok = b.PopFrontIf(func(x int) bool {
+	x, ok = b.PopFrontFunc(func(x int) bool {
 		assert(x == 1)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopFrontIf(func(x int) bool {
+	x, ok = b.PopFrontFunc(func(x int) bool {
 		assert(x == 1)
 		return true
 	})
 	assert(ok && x == 1)
 
-	x, ok = b.PopBackIf(func(x int) bool {
+	x, ok = b.PopBackFunc(func(x int) bool {
 		assert(x == 98)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopBackIf(func(x int) bool {
+	x, ok = b.PopBackFunc(func(x int) bool {
 		assert(x == 98)
 		return true
 	})
@@ -4345,19 +4354,19 @@ func TestDequePopIf(t *testing.T) {
 
 }
 
-func TestPriquePopIf(t *testing.T) {
+func TestPriquePopFunc(t *testing.T) {
 	var b Prique[int]
 	for i := range 100 {
 		b.Push(i)
 	}
-	x, ok := b.PopIf(nil)
+	x, ok := b.PopFunc(nil)
 	assert(ok && x == 99)
-	x, ok = b.PopIf(func(x int) bool {
+	x, ok = b.PopFunc(func(x int) bool {
 		assert(x == 98)
 		return false
 	})
 	assert(!ok && x == 0)
-	x, ok = b.PopIf(func(x int) bool {
+	x, ok = b.PopFunc(func(x int) bool {
 		assert(x == 98)
 		return true
 	})
@@ -4365,7 +4374,7 @@ func TestPriquePopIf(t *testing.T) {
 
 }
 
-func TestMapPopIf(t *testing.T) {
+func TestMapPopFunc(t *testing.T) {
 	N := 10000
 	var c Map[int, int]
 	isempty := func(k, v int) bool {
@@ -4373,13 +4382,13 @@ func TestMapPopIf(t *testing.T) {
 	}
 	c.tree.Sane(isempty)
 
-	key, value, deleted := c.PopFrontIf(nil)
+	key, value, deleted := c.PopFrontFunc(nil)
 	assert(!deleted && key == 0 && value == 0)
 
 	key, value, ok := c.Front()
 	assert(!ok && key == 0 && value == 0)
 
-	key, value, deleted = c.PopBackIf(nil)
+	key, value, deleted = c.PopBackFunc(nil)
 	assert(!deleted && key == 0 && value == 0)
 
 	key, value, ok = c.Back()
@@ -4403,16 +4412,16 @@ func TestMapPopIf(t *testing.T) {
 	}
 	c.tree.Sane(isempty)
 	for i := range N {
-		key, value, deleted := c.PopFrontIf(nil)
+		key, value, deleted := c.PopFrontFunc(nil)
 		assert(deleted && key == i && value == -key)
 		assert(c.Len() == N-i-1)
 		c.PushFront(key, value)
-		key, value, deleted = c.PopFrontIf(func(key int, value int) bool {
+		key, value, deleted = c.PopFrontFunc(func(key int, value int) bool {
 			assert(key == i && value == -key)
 			return false
 		})
 		assert(key == 0 && value == 0 && !deleted)
-		key, value, deleted = c.PopFrontIf(func(key int, value int) bool {
+		key, value, deleted = c.PopFrontFunc(func(key int, value int) bool {
 			assert(key == i && value == -key)
 			return true
 		})
@@ -4436,16 +4445,16 @@ func TestMapPopIf(t *testing.T) {
 	}
 	c.tree.Sane(isempty)
 	for i := range N {
-		key, value, ok := c.PopBackIf(nil)
+		key, value, ok := c.PopBackFunc(nil)
 		assert(ok && key == N-i-1 && value == -key)
 		c.PushBack(key, value)
-		key, value, ok = c.PopBackIf(func(key int, value int) bool {
+		key, value, ok = c.PopBackFunc(func(key int, value int) bool {
 			assert(key == N-i-1 && value == -key)
 			return false
 		})
 		assert(key == 0 && value == 0 && !ok)
 
-		key, value, ok = c.PopBackIf(func(key int, value int) bool {
+		key, value, ok = c.PopBackFunc(func(key int, value int) bool {
 			assert(key == N-i-1 && value == -key)
 			return true
 		})
@@ -4474,7 +4483,7 @@ func TestMapGetAction(t *testing.T) {
 	c.tree.Sane(isempty)
 
 	for _, i := range rng.Perm(N) {
-		c.GetAction(i, func(j int) (int, Action) {
+		c.Action(i, func(j int) (int, Action) {
 			assert(j == i)
 			return j, ActionGet
 		})
@@ -4482,7 +4491,7 @@ func TestMapGetAction(t *testing.T) {
 	c.tree.Sane(isempty)
 	for _, i := range rng.Perm(N) {
 		if i%2 == 0 {
-			c.GetAction(i, func(j int) (int, Action) {
+			c.Action(i, func(j int) (int, Action) {
 				assert(j == i)
 				j *= -1
 				return j, ActionReplace
@@ -4492,7 +4501,7 @@ func TestMapGetAction(t *testing.T) {
 	}
 	for _, i := range rng.Perm(N) {
 		if i%2 == 0 {
-			c.GetAction(i, func(j int) (int, Action) {
+			c.Action(i, func(j int) (int, Action) {
 				assert(j == -i)
 				return j, ActionGet
 			})
@@ -4500,7 +4509,7 @@ func TestMapGetAction(t *testing.T) {
 	}
 	for _, i := range rng.Perm(N) {
 		if i%2 == 1 {
-			c.GetAction(i, func(j int) (int, Action) {
+			c.Action(i, func(j int) (int, Action) {
 				assert(j == i)
 				return j, ActionGet
 			})
@@ -4509,7 +4518,7 @@ func TestMapGetAction(t *testing.T) {
 	var n = c.Len()
 	for _, i := range rng.Perm(N) {
 		if i%2 == 0 {
-			c.GetAction(i, func(j int) (int, Action) {
+			c.Action(i, func(j int) (int, Action) {
 				assert(j == -i)
 				return j, ActionDelete
 			})
@@ -4521,7 +4530,7 @@ func TestMapGetAction(t *testing.T) {
 
 	for _, i := range rng.Perm(N) {
 		if i%2 == 0 {
-			c.GetAction(i, func(j int) (int, Action) {
+			c.Action(i, func(j int) (int, Action) {
 				return j, ActionDelete
 			})
 			c.tree.Sane(isempty)
@@ -4531,7 +4540,7 @@ func TestMapGetAction(t *testing.T) {
 
 	for _, i := range rng.Perm(N) {
 		if i%2 == 1 {
-			c.GetAction(i, func(j int) (int, Action) {
+			c.Action(i, func(j int) (int, Action) {
 				assert(j == i)
 				return j, ActionDelete
 			})
@@ -4542,8 +4551,82 @@ func TestMapGetAction(t *testing.T) {
 	}
 	c.tree.Sane(isempty)
 	assert(c.Len() == 0)
-	c.GetAction(0, func(j int) (int, Action) {
+	c.Action(0, func(j int) (int, Action) {
 		return j, ActionDelete
 	})
 	assert(c.Len() == 0)
 }
+
+func TestAbstract(t *testing.T) {
+	var a Array[int]
+	a.PushBack(1)
+	a.PushBack(2)
+	a.PushBack(3)
+	a.PushBack(4)
+
+	println(a.Contains(1))
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Abstract interface requirements
+//////////////////////////////////////////////////////////////////////////////
+
+// _AbstractCollection models a collection C of elements E,
+// such as *hash.Map, *hash.Set, *ordered.Map, or set.Set.
+type _AbstractCollection[E any, C _AbstractCollection[E, C]] interface {
+	Clear()
+	Clone() C
+	Contains(E) bool
+	Len() int
+	String() string
+}
+
+// _AbstractMap models a mapping M from keys K to values V,
+// such as *hash.Map or *ordered.Map.
+type _AbstractMap[K, V any, M _AbstractMap[K, V, M]] interface {
+	_AbstractCollection[K, M]
+
+	All() iter.Seq2[K, V]
+	Delete(K) (V, bool)
+	DeleteFunc(func(K, V) bool) bool
+	Get(K) V
+	Keys() iter.Seq[K]
+	Lookup(K) (V, bool)
+	Set(K, V) (V, bool)
+	Values() iter.Seq[V]
+}
+
+// _AbstractSet models a set S of elements E,
+// such as *hash.Set, or set.Set.
+type _AbstractSet[E any, S _AbstractSet[E, S]] interface {
+	_AbstractCollection[E, S]
+
+	All() iter.Seq[E]
+	Delete(E) bool
+	DeleteFunc(func(E) bool) bool
+	Difference(S) S
+	DifferenceWith(S)
+	Equal(S) bool
+	Insert(E) bool
+	Intersection(S) S
+	IntersectionWith(S)
+	Intersects(S) bool
+	SymmetricDifference(S) S
+	SymmetricDifferenceWith(S)
+	Union(S) S
+	UnionWith(S)
+}
+
+// Ensure conformance
+var (
+	_ = (_AbstractCollection[int, *Map[int, int]])(&Map[int, int]{})
+	_ = (_AbstractCollection[int, *Set[int]])(&Set[int]{})
+	_ = (_AbstractCollection[int, *Table[int]])(&Table[int]{})
+	_ = (_AbstractCollection[int, *Prique[int]])(&Prique[int]{})
+	_ = (_AbstractCollection[int, *Array[int]])(&Array[int]{})
+	_ = (_AbstractCollection[int, *Queue[int]])(&Queue[int]{})
+	_ = (_AbstractCollection[int, *Deque[int]])(&Deque[int]{})
+	_ = (_AbstractCollection[int, *Stack[int]])(&Stack[int]{})
+	_ = (_AbstractMap[int, int, *Map[int, int]])(&Map[int, int]{})
+	_ = (_AbstractSet[int, *Set[int]])(&Set[int]{})
+)

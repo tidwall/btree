@@ -2,8 +2,8 @@
 
 [![GoDoc](https://godoc.org/github.com/tidwall/btree?status.svg)](https://godoc.org/github.com/tidwall/btree)
 
-The btree package provides btree based collection types that allow Go programmers 
-to easily implement common data structures like maps, arrays, queues, and stacks. 
+The btree package provides btree based collection types that allows Go programmers 
+to easily interface with common data structures like maps, arrays, queues, and stacks. 
 
 # Features
 
@@ -29,6 +29,16 @@ Includes the following collection types:
 - [`Prique`](#prique): Priority queue
 
 
+## Using 
+
+```
+go get github.com/tidwall/btree/v2
+```
+
+<!---------------------------------------------------------------------------
+-- Map
+----------------------------------------------------------------------------->
+
 ## Map
 
 btree.Map is a sorted associative collection of key-value pairs with unique keys. 
@@ -40,7 +50,8 @@ The keys adhere to the parameter type [`cmp.Ordered`](https://pkg.go.dev/cmp#Ord
 Insert(key, val)        # Insert an item. (does not replace if already exists)
 Replace(key, val)       # Replace an existing item. (does not insert if not exists)
 Set(key, val)           # Insert or replace an item.
-Get(key, val)           # Get an existing item.
+Lookup(key)             # Get an existing item, returning false if not exists
+Get(key)                # Get an existing item.
 Contains(key)           # Test if an item exists.
 Delete(key)             # Remove an item.
 
@@ -63,8 +74,8 @@ PopFront()              # Remove the first item.
 PopBack()               # Remove the last item.
 Front()                 # Get the first item.
 Back()                  # Get the last item.
-PopFrontIf(cond)        # Remove first item if cond returns true.
-PopBackIf(cond)         # Remove last item if cond returns true.
+PopFrontFunc(cond)      # Remove first item if cond returns true.
+PopBackFunc(cond)       # Remove last item if cond returns true.
 
 InsertAt(i, key, val)   # Inserts item at index. (collection size grows by one)
 ReplaceAt(i, key, val)  # Replace an item at index.
@@ -77,12 +88,15 @@ DescendAt(i)            # Iterate items in descending order <= to index. (iter.S
 DeleteRange(min, max)   # Remove items within the provided sub-range. [min,max)
 DeleteRangeAt(i, count) # Remove items starting at index.
 
-GetAction(key action)   # Perform Action (replace or delete) on value
+Action(key, actfunc)    # Perform action (replace/delete) using custom function
+DeleteFunc(delfunc)     # Delete item using custom function
 
 Len()                   # Get the number of items in map.
-Copy()                  # Copy map, fast O(1), uses Copy-on-write shadow cloning.
+Clone()                 # Clone map, fast O(1), uses copy-on-write shadow cloning.
 Clear()                 # Remove all items from map
-Release()               # Same as Clear() but optimized for copied collections.
+Release()               # Same as Clear() but optimized for cloned collections.
+
+String()                # String representation
 ```
 
 ### Example
@@ -93,7 +107,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/btree"
+	"github.com/tidwall/btree/v2"
 )
 
 func main() {
@@ -139,6 +153,10 @@ func main() {
 // user:6 Andy
 ```
 
+<!---------------------------------------------------------------------------
+-- Set
+----------------------------------------------------------------------------->
+
 ## Set
 
 btree.Set is an associative collection of unique sorted keys. 
@@ -147,10 +165,10 @@ The keys adhere to the parameter type [`cmp.Ordered`](https://pkg.go.dev/cmp#Ord
 ### Operations
 
 ```py
-Insert(key)             # Insert key.
-Contains(key)           # Check if key exists.
-Delete(key)             # Remove key.
-Len()                   # Get the number of keys in the collection.
+Insert(key)             # Insert key
+Contains(key)           # Check if key exists
+Delete(key)             # Remove key
+Len()                   # Get the number of keys in the collection
 
 All()                   # Iterate keys in ascending order.            (iter.Seq[K])
 Backward()              # Iterate keys in descending order.           (iter.Seq[K])
@@ -159,34 +177,50 @@ Descend(key)            # Iterate keys in descending order <= to key. (iter.Seq[
 Drain()                 # Iterate and remove in ascending order.      (iter.Seq[K])
 DrainBackward()         # Iterate and remove in descending order.     (iter.Seq[K])
 
-Seek(key)               # Searches for the first key that is >= to key.
-SeekNext(key)           # Searches for the first key that is > key.
-SeekPrev(key)           # Searches for the first key that is < key.
+Seek(key)               # Searches for the first key that is >= to key
+SeekNext(key)           # Searches for the first key that is > key
+SeekPrev(key)           # Searches for the first key that is < key
 
-PushFront(key)          # Insert key to front of collection.
-PushBack(key)           # Insert key to back of collection.
-PopFront()              # Remove the first key.
-PopBack()               # Remove the last key.
-Front()                 # Get the first key.
-Back()                  # Get the last key.
-PopFrontIf(cond)        # Remove first key if cond returns true.
-PopBackIf(cond)         # Remove last key if cond returns true.
+PushFront(key)          # Insert key to front of collection
+PushBack(key)           # Insert key to back of collection
+PopFront()              # Remove the first key
+PopBack()               # Remove the last key
+Front()                 # Get the first key
+Back()                  # Get the last key
+PopFrontFunc(cond)      # Remove first key if cond returns true
+PopBackFunc(cond)       # Remove last key if cond returns true
 
 InsertAt(i, key)        # Insert key at index. (collection size grows by one)
-ReplaceAt(i, key)       # Replace key at index.
-GetAt(i)                # Gets key at index.
-IndexOf(key)            # Get the index of key.
-DeleteAt(i)             # Remove key at index.
+ReplaceAt(i, key)       # Replace key at index
+GetAt(i)                # Gets key at index
+IndexOf(key)            # Get the index of key
+DeleteAt(i)             # Remove key at index
 AscendAt(i)             # Iterate keys in ascending order >= to index. (iter.Seq[K])
 DescendAt(i)            # Iterate key in descending order <= to index. (iter.Seq[K])
 
 DeleteRange(min, max)   # Remove keys within the provided sub-range. [min,max)
-DeleteRangeAt(i, count) # Remove keys starting at index.
+DeleteRangeAt(i, count) # Remove keys starting at index
 
-Len()                   # Get the number of items in collection.
-Copy()                  # Copy collection, fast O(1), uses Copy-on-write shadow cloning.
+DeleteFunc(delfunc)     # Delete item using custom function
+
+Len()                   # Get the number of items in collection
+Clone()                 # Clone collection, fast O(1), uses Copy-on-write shadow cloning
 Clear()                 # Remove all items from collection
-Release()               # Same as Clear() but optimized for copied collections.
+Release()               # Same as Clear() but optimized for cloned collections
+
+String()                # String representation
+
+Difference(s2)          # Returns new set of keys that are in set but not in other
+DifferenceWith(s2)      # Removes any key from set that are in other
+Equal(s2)               # Check if two sets are equal
+Intersection(s2)        # Returns new set containing item that are in both sets
+IntersectionWith(s2)    # Removes any items from set that are not in other
+Intersects(s2)          # Checks if sets share any keys
+SymmetricDifference(s2) # Returns new set with items that are in either, but not both sets.
+SymmetricDifferenceWith(s2) # Update set to the symmetric difference of both sets
+Union(set)              # Returns new set containing all keys of both sets.
+UnionWith(set)          # Inserts all keys of other set.
+
 ```
 
 ```go
@@ -195,7 +229,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/btree"
+	"github.com/tidwall/btree/v2"
 )
 
 func main() {
@@ -239,20 +273,25 @@ func main() {
 // Janet
 ```
 
+<!---------------------------------------------------------------------------
+-- Array
+----------------------------------------------------------------------------->
+
 ## Array
 
 btree.Array is a dynamic resizable array of unsorted items.
 It provides random access with `O(log n)` complexity to all data operations, 
 including inserting and deleting items in the middle of the array.
 
-
 ### Operations
 
 ```py
 Insert(i, item)       # Insert item at index. (collection size grows by one)
 Replace(i, item)      # Replace existing item at index.
+Lookup(i)             # Gets item at index. Returns false it not exists
 Get(i)                # Gets item at index.
 Delete(i)             # Remove item at index.
+Contains(item)        # Checks if item exists
 
 All()                 # Iterate items in ascending order.              (iter.Seq[T])
 Backward()            # Iterate items in descending order.             (iter.Seq[T])
@@ -267,15 +306,17 @@ PopFront()            # Remove the first item.
 PopBack()             # Remove the last item.
 Front()               # Get the first item.
 Back()                # Get the last item.
-PopFrontIf(cond)      # Remove first item if cond returns true.
-PopBackIf(cond)       # Remove last item if cond returns true.
+PopFrontFunc(cond)    # Remove first item if cond returns true.
+PopBackFunc(cond)     # Remove last item if cond returns true.
 
 DeleteRange(i, count) # Remove items starting at index.
 
 Len()                 # Get the number of items in collection.
-Copy()                # Copy collection, fast O(1), uses Copy-on-write shadow cloning.
+Clone()               # Clone collection, fast O(1), uses Copy-on-write shadow cloning.
 Clear()               # Remove all items from collection
-Release()             # Same as Clear() but optimized for copied collections.
+Release()             # Same as Clear() but optimized for cloned collections.
+
+String()              # String representation
 ```
 
 ### Example
@@ -286,7 +327,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/btree"
+	"github.com/tidwall/btree/v2"
 )
 
 func main() {
@@ -332,7 +373,9 @@ func main() {
 // Steve
 ```
 
-<!----------------------------------------------------------------------------->
+<!---------------------------------------------------------------------------
+-- Table
+----------------------------------------------------------------------------->
 
 ## Table
 
@@ -526,6 +569,7 @@ Table operations include:
 Insert(item)            # Insert an item. (does not replace if already exists)
 Replace(item)           # Replace an existing item. (does not insert if not exists)
 Set(item)               # Insert or replace an item.
+Lookup(key)             # Get an existing item. Return false if not exists
 Get(key)                # Get an existing item.
 Contains(key)           # Test if an item exists.
 Delete(key)             # Remove an item.
@@ -547,8 +591,8 @@ PopFront()              # Remove the first item.
 PopBack()               # Remove the last item.
 Front()                 # Get the first item.
 Back()                  # Get the last item.
-PopFrontIf(cond)        # Remove first item if cond returns true.
-PopBackIf(cond)         # Remove last item if cond returns true.
+PopFrontFunc(cond)        # Remove first item if cond returns true.
+PopBackFunc(cond)         # Remove last item if cond returns true.
 
 InsertAt(i, item)       # Inserts item at index. (collection size grows by one)
 ReplaceAt(i, item)      # Replace an item at index.
@@ -562,12 +606,16 @@ DeleteRange(min, max)   # Remove items within the provided sub-range. [min,max)
 DeleteRangeAt(i, count) # Remove items starting at index.
 
 Len()                   # Get the number of items in collection.
-Copy()                  # Copy collection, fast O(1), uses Copy-on-write shadow cloning.
+Clone()                 # Clone collection, fast O(1), uses Copy-on-write shadow cloning.
 Clear()                 # Remove all items from collection
-Release()               # Same as Clear() but optimized for copied collections.
+Release()               # Same as Clear() but optimized for cloned collections.
+
+String()                # String representation
 ```
 
-<!----------------------------------------------------------------------------->
+<!---------------------------------------------------------------------------
+-- Stack
+----------------------------------------------------------------------------->
 
 ## Stack
 
@@ -577,18 +625,21 @@ a LIFO (last-in, first-out) data structure.
 ### Operations
 
 ```py
-Push(item)   # Insert item to top of stack.
-Pop()        # Remove item from top stack.
-Top()        # Get the top item in stack
-PopIf(cond)  # Remove item from top stack if cond returns true.
+Push(item)     # Insert item to top of stack.
+Pop()          # Remove item from top stack.
+Top()          # Get the top item in stack
+PopFunc(cond)  # Remove item from top stack if cond returns true.
+Contains(item) # Check if item exists
 
-All()      # Iterate items in ascending order.      (iter.Seq[T])
-Drain()    # Iterate and remove in ascending order. (iter.Seq[T])
+All()          # Iterate items in ascending order.      (iter.Seq[T])
+Drain()        # Iterate and remove in ascending order. (iter.Seq[T])
 
-Len()      # Get the number of items in collection.
-Copy()     # Copy collection, fast O(1), uses Copy-on-write shadow cloning.
-Clear()    # Remove all items from collection
-Release()  # Same as Clear() but optimized for copied collections.
+Len()          # Get the number of items in collection.
+Clone()        # Clone collection, fast O(1), uses Copy-on-write shadow cloning.
+Clear()        # Remove all items from collection
+Release()      # Same as Clear() but optimized for cloned collections.
+
+String()       # String representation
 ```
 
 ```go
@@ -597,7 +648,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/btree"
+	"github.com/tidwall/btree/v2"
 )
 
 func main() {
@@ -650,6 +701,10 @@ func main() {
 // Andrea
 ```
 
+<!---------------------------------------------------------------------------
+-- Stack
+----------------------------------------------------------------------------->
+
 ## Queue
 
 btree.Queue is a collection with the functionality of a queue - specifically, 
@@ -658,18 +713,21 @@ a FIFO (first-in, first-out) data structure.
 ### Operations
 
 ```py
-Push(item)   # Insert item at the end of queue.
-Pop()        # Remove the first item.
-Front()      # Get the first item.
-PopIf(cond)  # Remove first item if cond returns true.
+Push(item)     # Insert item at the end of queue.
+Pop()          # Remove the first item.
+Front()        # Get the first item.
+PopFunc(cond)  # Remove first item if cond function returns true.
+Contains(item) # Checks if item exists
 
-All()      # Iterate items in ascending order.      (iter.Seq[T])
-Drain()    # Iterate and remove in ascending order. (iter.Seq[T])
+All()          # Iterate items in ascending order.      (iter.Seq[T])
+Drain()        # Iterate and remove in ascending order. (iter.Seq[T])
 
-Len()      # Get the number of items in collection.
-Copy()     # Copy collection, fast O(1), uses Copy-on-write shadow cloning.
-Clear()    # Remove all items from collection
-Release()  # Same as Clear() but optimized for copied collections.
+Len()          # Get the number of items in collection.
+Clone()        # Clone collection, fast O(1), uses Copy-on-write shadow cloning.
+Clear()        # Remove all items from collection
+Release()      # Same as Clear() but optimized for cloned collections.
+
+String()       # String representation
 ```
 
 ### Example
@@ -680,7 +738,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/btree"
+	"github.com/tidwall/btree/v2"
 )
 
 func main() {
@@ -733,6 +791,10 @@ func main() {
 // Steve
 ```
 
+<!---------------------------------------------------------------------------
+-- Deque
+----------------------------------------------------------------------------->
+
 ## Deque
 
 btree.Deque is a double-ended queue.
@@ -740,23 +802,26 @@ btree.Deque is a double-ended queue.
 ### Operations
 
 ```py
-Push(item)       # Insert item at the end of queue.
-PopFront()       # Remove the first item.
-PopBack()        # Remove the last item.
-Front()          # Get the first item.
-Back( )          # Get the last item.
-PopFrontIf(cond) # Remove first item if cond returns true.
-PopBackIf(cond)  # Remove last item if cond returns true.
+Push(item)         # Insert item at the end of queue.
+PopFront()         # Remove the first item.
+PopBack()          # Remove the last item.
+Front()            # Get the first item.
+Back( )            # Get the last item.
+PopFrontFunc(cond) # Remove first item if cond returns true.
+PopBackFunc(cond)  # Remove last item if cond returns true.
+Contains(item)     # Checks if item exists
 
-All()           # Iterate items in ascending order.       (iter.Seq[T])
-Backward()      # Iterate items in desending order.       (iter.Seq[T])
-Drain()         # Iterate and remove in ascending order.  (iter.Seq[T])
-DrainBackward() # Iterate and remove in descending order. (iter.Seq[T])
+All()              # Iterate items in ascending order.       (iter.Seq[T])
+Backward()         # Iterate items in desending order.       (iter.Seq[T])
+Drain()            # Iterate and remove in ascending order.  (iter.Seq[T])
+DrainBackward()    # Iterate and remove in descending order. (iter.Seq[T])
 
-Len()           # Get the number of items in collection.
-Copy()          # Copy collection, fast O(1), uses Copy-on-write shadow cloning.
-Clear()         # Remove all items from collection
-Release()       # Same as Clear() but optimized for copied collections.
+Len()              # Get the number of items in collection.
+Clone()            # Clone collection, fast O(1), uses Copy-on-write shadow cloning.
+Clear()            # Remove all items from collection
+Release()          # Same as Clear() but optimized for cloned collections.
+
+String()           # String representation
 ```
 
 ### Example
@@ -767,7 +832,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/btree"
+	"github.com/tidwall/btree/v2"
 )
 
 func main() {
@@ -820,6 +885,10 @@ func main() {
 // Jane
 ```
 
+<!---------------------------------------------------------------------------
+-- Deque
+----------------------------------------------------------------------------->
+
 ## Prique
 
 btree.Prique is a priority queue collection that sorts items by largest to 
@@ -832,18 +901,21 @@ It also inherits the [Table](#table) collection, allowing for
 ### Operations
 
 ```py
-Push(item)   # Insert item into queue.
-Pop()        # Remove the largest item.
-Front()      # Get the largest item.
-PopIf(cond)  # Remove largest item if cond returns true.
+Push(item)     # Insert item into queue.
+Pop()          # Remove the largest item.
+Front()        # Get the largest item.
+PopFunc(cond)  # Remove largest item if cond returns true.
+Contains(item) # Checks if item exists
 
-All()      # Iterate items in order of largest to smallest.      (iter.Seq[T])
-Drain()    # Iterate and remove in order of largest to smallest. (iter.Seq[T])
+All()          # Iterate items in order of largest to smallest.      (iter.Seq[T])
+Drain()        # Iterate and remove in order of largest to smallest. (iter.Seq[T])
 
-Len()      # Get the number of items in collection.
-Copy()     # Copy collection, fast O(1), uses Copy-on-write shadow cloning.
-Clear()    # Remove all items from collection
-Release()  # Same as Clear() but optimized for copied collections.
+Len()          # Get the number of items in collection.
+Clone()        # Clone collection, fast O(1), uses Copy-on-write shadow cloning.
+Clear()        # Remove all items from collection
+Release()      # Same as Clear() but optimized for cloned collections.
+
+String()       # String representation
 ```
 
 ### Example
@@ -854,7 +926,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/tidwall/btree"
+	"github.com/tidwall/btree/v2"
 )
 
 func main() {
