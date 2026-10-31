@@ -2,14 +2,13 @@
 
 [![GoDoc](https://godoc.org/github.com/tidwall/btree?status.svg)](https://godoc.org/github.com/tidwall/btree)
 
-The btree package provides btree based collection types that allows Go programmers 
-to easily interface with common data structures like maps, arrays, queues, and stacks. 
+An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 
 # Features
 
-- Includes collections types: map, set, queue, stack, table. Each backed by a btree structure.
+- Includes a variety of common [collections types](#types). All backed by a btree structure.
 - Modern Go ergonomics with a friendly API.
-- All data operations are O(log n) complexity.
+- All data operations are [O(log n)](https://en.wikipedia.org/wiki/Time_complexity#Logarithmic_time) complexity.
 - Instant copy-on-write (shadow clones), providing O(1) snapshots.
 - Uses [btree counting](https://www.chiark.greenend.org.uk/~sgtatham/algorithms/cbtree.html) for O(log n) random access.
 - Exhaustively tested code with 100% coverage.
