@@ -4,6 +4,16 @@
 
 An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 
+<details>
+  <summary>Major changes to be aware of when migrating from v1 to v2.</summary>
+
+  - Callbacks iteration now uses the modern Go `iter.Seq`
+  - Get() now returns one value. For the two value return use Lookup()
+  - Locking and mutexes have been removed from all btrees. You are not responsible for goroutine synchronization.
+  - DeleteRange() has been renamed to Drain()
+  - Insert() and Replace() are available along with the traditional Set()
+</details>
+
 ## Features
 
 - Includes a variety of common [collections types](#types). All backed by a btree structure
@@ -14,18 +24,6 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 - Uses [btree counting](https://www.chiark.greenend.org.uk/~sgtatham/algorithms/cbtree.html) for O(log n) random access
 - Exhaustively tested code with 100% coverage
 - Optimized for [high performance](#performance) and low memory
-
-<details>
-  <summary>Major changes to be aware of when migrating from v1 to v2.</summary>
-
-  - Callbacks iteration now uses the modern Go `iter.Seq`
-  - Get() now returns one value. For the two value return use Lookup()
-  - Locking and mutexes have been removed from all btrees. You are not responsible for goroutine synchronization.
-  - DeleteRange() has been renamed to Drain()
-  - Insert() and Replace() are available along with the traditional Set()
-
-</details>
-
 
 ## Types
 
