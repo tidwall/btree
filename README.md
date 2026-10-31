@@ -379,7 +379,7 @@ func main() {
 ## Table
 
 btree.Table is a general purpose btree collection for storing sorted data.  
-In v1 this was called `BtreeG`.
+_In the previous version v1.0 this was called `BtreeG`._
 
 ### Features
 
