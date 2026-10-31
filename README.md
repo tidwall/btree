@@ -378,7 +378,7 @@ func main() {
 
 ## Table
 
-btree.Table is a general purpose btree collection for storing sorted data.
+btree.Table is a general purpose btree collection for storing sorted data.  
 In v1 this was called `BtreeG`.
 
 ### Features
