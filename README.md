@@ -15,6 +15,18 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 - Exhaustively tested code with 100% coverage
 - Optimized for [high performance](#performance) and low memory
 
+<details>
+  <summary>Major changes to be aware of when migrating from v1 to v2.</summary>
+
+  - Callbacks iteration now uses the modern Go `iter.Seq`
+  - Get() now returns one value. For the two value return use Lookup()
+  - Locking and mutexes have been removed from all btrees.
+  - DeleteRange() has been renamed to Drain()
+  - Insert() and Replace() are available along with the traditional Set()
+  - The `btree.BtreeG` type is now `btree.Table`
+</details>
+
+
 ## Types
 
 - [`Map`](#map): Key value pairs. Sorting ordered by key
@@ -31,17 +43,6 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 ```
 go get github.com/tidwall/btree/v2
 ```
-
-<details>
-  <summary>Major changes to be aware of when migrating from v1 to v2.</summary>
-
-  - Callbacks iteration now uses the modern Go `iter.Seq`
-  - Get() now returns one value. For the two value return use Lookup()
-  - Locking and mutexes have been removed from all btrees.
-  - DeleteRange() has been renamed to Drain()
-  - Insert() and Replace() are available along with the traditional Set()
-  - The `btree.BtreeG` type is now `btree.Table`
-</details>
 
 <!---------------------------------------------------------------------------
 -- Map
