@@ -577,36 +577,34 @@ func (b *Map[K, V]) Clone() *Map[K, V] {
 	return b2
 }
 
-// DeleteRangeAtOptions will delete all items within the provided index and
+// DrainAtOptions will delete all items within the provided index and
 // count sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Map[K, V]) DeleteRangeAtOptions(index, count int,
-	opts DeleteRangeOptions,
-) Slice2[K, V] {
-	return b.tree.DeleteRangeAt(index, count, opts)
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Map[K, V]) DrainAtOptions(index, count int, opts DrainOptions,
+) Extract2[K, V] {
+	return b.tree.DrainAt(index, count, opts)
 }
 
-// DeleteRangeOptions will delete all items within the provided min (inclusive)
+// DrainOptions will delete all items within the provided min (inclusive)
 // and max (exclusive) sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Map[K, V]) DeleteRangeOptions(min, max K, opts DeleteRangeOptions,
-) Slice2[K, V] {
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Map[K, V]) DrainOptions(min, max K, opts DrainOptions) Extract2[K, V] {
 	var emptyValue V
-	return b.tree.DeleteRange(min, emptyValue, max, emptyValue, opts)
+	return b.tree.Drain(min, emptyValue, max, emptyValue, opts)
 }
 
-// DeleteRangeAt will delete all items within the provided index and count
+// DrainAt will delete all items within the provided index and count
 // sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Map[K, V]) DeleteRangeAt(index, count int) Slice2[K, V] {
-	return b.DeleteRangeAtOptions(index, count, DeleteRangeOptions{})
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Map[K, V]) DrainAt(index, count int) Extract2[K, V] {
+	return b.DrainAtOptions(index, count, DrainOptions{})
 }
 
-// DeleteRange will delete all items within the provided min (inclusive) and
+// Drain will delete all items within the provided min (inclusive) and
 // max (exclusive) sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Map[K, V]) DeleteRange(min, max K) Slice2[K, V] {
-	return b.DeleteRangeOptions(min, max, DeleteRangeOptions{})
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Map[K, V]) Drain(min, max K) Extract2[K, V] {
+	return b.DrainOptions(min, max, DrainOptions{})
 }
 
 // Decend returns an iterator with items less than key, in reverse order.
@@ -818,15 +816,15 @@ func (b *Map[K, V]) SeekPrevMut(key K) (K, V, bool) {
 	return b.tree.SeekPrevMut(key, emptyValue)
 }
 
-// Drain deletes all items from map and returns them as an iterator
-func (b *Map[K, V]) Drain() iter.Seq2[K, V] {
-	return b.tree.Drain()
+// DrainOLD deletes all items from map and returns them as an iterator
+func (b *Map[K, V]) DrainOLD() iter.Seq2[K, V] {
+	return b.tree.DrainOLD()
 }
 
-// DrainBackward deletes all items from map and returns them as an iterator, in
+// DrainBackwardOLD deletes all items from map and returns them as an iterator, in
 // reverse order
-func (b *Map[K, V]) DrainBackward() iter.Seq2[K, V] {
-	return b.tree.DrainBackward()
+func (b *Map[K, V]) DrainBackwardOLD() iter.Seq2[K, V] {
+	return b.tree.DrainBackwardOLD()
 }
 
 // String returns a string representation of map

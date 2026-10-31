@@ -88,18 +88,20 @@ func (b *Array[T]) GetMut(index int) T {
 	return value
 }
 
-// DeleteRangeOptions deletes a range of items and returns deleted items as
-// an iterable slice.
-func (b *Array[T]) DeleteRangeOptions(index, count int,
-	opts DeleteRangeOptions,
-) Slice[T] {
-	return sliceV(b.tree.DeleteRangeAt(index, count, opts))
+// DrainOptions will delete all items within the provided index and
+// count sub-range.
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Array[T]) DrainOptions(index, count int,
+	opts DrainOptions,
+) Extract[T] {
+	return sliceV(b.tree.DrainAt(index, count, opts))
 }
 
-// DeleteRange deletes a range of items and returns deleted items as an
-// iterable slice.
-func (b *Array[T]) DeleteRange(index, count int) Slice[T] {
-	return b.DeleteRangeOptions(index, count, DeleteRangeOptions{})
+// DrainOptions will delete all items within the provided index and
+// count sub-range.
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Array[T]) Drain(index, count int) Extract[T] {
+	return b.DrainOptions(index, count, DrainOptions{})
 }
 
 // Len returns the number item in array.
@@ -249,15 +251,15 @@ func (b *Array[T]) Append(items ...T) {
 	}
 }
 
-// Drain removes all items and returns them as an iterable sequence.
-func (b *Array[T]) Drain() iter.Seq[T] {
-	return iterV(b.tree.Drain())
+// DrainOLD removes all items and returns them as an iterable sequence.
+func (b *Array[T]) DrainOLD() iter.Seq[T] {
+	return iterV(b.tree.DrainOLD())
 }
 
-// DrainBackward removes all items and returns them as an iterable sequence in
+// DrainBackwardOLD removes all items and returns them as an iterable sequence in
 // reverse order.
-func (b *Array[T]) DrainBackward() iter.Seq[T] {
-	return iterV(b.tree.DrainBackward())
+func (b *Array[T]) DrainBackwardOLD() iter.Seq[T] {
+	return iterV(b.tree.DrainBackwardOLD())
 }
 
 // Contains checks if array contains item.

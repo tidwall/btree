@@ -112,17 +112,6 @@ func (b *Prique[T]) AllMut() iter.Seq[T] {
 	}
 }
 
-// Drain iterates over each item in queue, popping along the way.
-func (b *Prique[T]) Drain() iter.Seq[T] {
-	return func(yield func(T) bool) {
-		for v := range b.table.DrainBackward() {
-			if !yield(v.value) {
-				break
-			}
-		}
-	}
-}
-
 // Delete item with the provided key.
 // If duplicate items with the same key exist, only one will be deleted;
 // specifically the oldest duplicate item is deleted.

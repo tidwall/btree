@@ -174,18 +174,6 @@ func (b *Deque[T]) BackwardMut() iter.Seq[T] {
 	return iterV(b.tree.BackwardMut())
 }
 
-// Drain removes all items and returns them as an iterator starting with the
-// first.
-func (b *Deque[T]) Drain() iter.Seq[T] {
-	return iterV(b.tree.Drain())
-}
-
-// DrainBackward removes all items and returns them as an iterator starting
-// with the last.
-func (b *Deque[T]) DrainBackward() iter.Seq[T] {
-	return iterV(b.tree.DrainBackward())
-}
-
 // Contains returns true if queue contains item.
 func (b *Deque[T]) Contains(item T) bool {
 	cmp := CompareFor[T]()

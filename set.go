@@ -188,45 +188,34 @@ func (b *Set[K]) Release() {
 	b.base.Release()
 }
 
-// DeleteRangeAtOptions will delete all items within the provided index and
+// DrainAtOptions will delete all items within the provided index and
 // count sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Set[K]) DeleteRangeAtOptions(index, count int, opts DeleteRangeOptions,
-) Slice[K] {
-	return sliceK(b.base.DeleteRangeAtOptions(index, count, opts))
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) DrainAtOptions(index, count int, opts DrainOptions,
+) Extract[K] {
+	return sliceK(b.base.DrainAtOptions(index, count, opts))
+}
+
+// DrainOptions will delete all items within the provided min (inclusive)
+// and max (exclusive) sub-range.
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) DrainOptions(min, max K, opts DrainOptions,
+) Extract[K] {
+	return sliceK(b.base.DrainOptions(min, max, opts))
 }
 
 // DeleteRangeOptions will delete all items within the provided min (inclusive)
 // and max (exclusive) sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Set[K]) DeleteRangeOptions(min, max K, opts DeleteRangeOptions,
-) Slice[K] {
-	return sliceK(b.base.DeleteRangeOptions(min, max, opts))
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) DrainAt(index, count int) Extract[K] {
+	return b.DrainAtOptions(index, count, DrainOptions{})
 }
 
-// DeleteRangeOptions will delete all items within the provided min (inclusive)
-// and max (exclusive) sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Set[K]) DeleteRangeAt(index, count int) Slice[K] {
-	return b.DeleteRangeAtOptions(index, count, DeleteRangeOptions{})
-}
-
-// DeleteRange will delete all items within the provided min (inclusive) and
+// Drain will delete all items within the provided min (inclusive) and
 // max (exclusive) sub-range.
-// Returns the deleted items as an ordered slice that can be iterated over.
-func (b *Set[K]) DeleteRange(min, max K) Slice[K] {
-	return b.DeleteRangeOptions(min, max, DeleteRangeOptions{})
-}
-
-// Drain deletes all item and returns them as an iterator
-func (b *Set[K]) Drain() iter.Seq[K] {
-	return iterK(b.base.Drain())
-}
-
-// DrainBackward deletes all item and returns them as an iterator, in reverse
-// order
-func (b *Set[K]) DrainBackward() iter.Seq[K] {
-	return iterK(b.base.DrainBackward())
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) Drain(min, max K) Extract[K] {
+	return b.DrainOptions(min, max, DrainOptions{})
 }
 
 // String representation

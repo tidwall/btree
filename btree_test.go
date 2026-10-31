@@ -514,11 +514,11 @@ func testMapDeleteRange(rng *rand.Rand, N int) time.Duration {
 	arr = slices.Delete(arr, s, e)
 
 	start := time.Now()
-	var opts *DeleteRangeOptions
+	var opts *DrainOptions
 	var keyMin int
 	if minexcl {
 		keyMin = keys[s-1]
-		opts = &DeleteRangeOptions{}
+		opts = &DrainOptions{}
 		opts.MinExclusive = true
 	} else {
 		keyMin = keys[s]
@@ -528,18 +528,18 @@ func testMapDeleteRange(rng *rand.Rand, N int) time.Duration {
 	if e == N {
 		keyMax = keys[e-1]
 		if opts == nil {
-			opts = &DeleteRangeOptions{}
+			opts = &DrainOptions{}
 		}
 		opts.MaxInclusive = true
 	} else {
 		keyMax = keys[e]
 	}
 
-	var list Slice2[int, int]
+	var list Extract2[int, int]
 	if opts != nil {
-		list = m.DeleteRangeOptions(keyMin, keyMax, *opts)
+		list = m.DrainOptions(keyMin, keyMax, *opts)
 	} else {
-		list = m.DeleteRange(keyMin, keyMax)
+		list = m.Drain(keyMin, keyMax)
 	}
 	elapsed := time.Since(start)
 	assert(len(arr) == m.Len())
@@ -658,22 +658,22 @@ func TestMapDeleteRange(t *testing.T) {
 		for i := 0; i < n; i++ {
 			m.Set(i, i)
 		}
-		list := m.DeleteRangeOptions(n-1, n+1,
-			DeleteRangeOptions{MinExclusive: true})
+		list := m.DrainOptions(n-1, n+1,
+			DrainOptions{MinExclusive: true})
 		assert(m.Len() == n && list.Len() == 0)
 	}
 }
 
 func TestMapDeleteRangeAtBounds(t *testing.T) {
 	var m Map[int, int]
-	var opts DeleteRangeOptions
-	list := m.DeleteRangeAtOptions(-1, 0, opts)
+	var opts DrainOptions
+	list := m.DrainAtOptions(-1, 0, opts)
 	assert(list.Len() == 0)
-	list = m.DeleteRangeAtOptions(-1, 0, opts)
+	list = m.DrainAtOptions(-1, 0, opts)
 	assert(list.Len() == 0)
-	list = m.DeleteRangeAtOptions(0, -1, opts)
+	list = m.DrainAtOptions(0, -1, opts)
 	assert(list.Len() == 0)
-	list = m.DeleteRangeAtOptions(1, 1, opts)
+	list = m.DrainAtOptions(1, 1, opts)
 	assert(list.Len() == 0)
 
 	// // micro unit
@@ -819,7 +819,7 @@ func TestMapCOW(t *testing.T) {
 			assert(ok)
 			assert(v1.value == vals2[n-n/3].value)
 
-			list := c.DeleteRange(k0, k1)
+			list := c.Drain(k0, k1)
 			var i int
 			for k, v := range list.All() {
 				assert(k == keys2[n/3+i])
@@ -1047,7 +1047,7 @@ func TestMapDeleteRangeAtIX(t *testing.T) {
 	for i := range 10000 {
 		m.Set(i, i)
 	}
-	s := m.DeleteRangeAtOptions(3000, 1000, DeleteRangeOptions{
+	s := m.DrainAtOptions(3000, 1000, DrainOptions{
 		MinExclusive: false,
 		MaxInclusive: false,
 	})
@@ -1065,7 +1065,7 @@ func TestMapDeleteRangeAtIX(t *testing.T) {
 	for i := range 10000 {
 		m.Set(i, i)
 	}
-	s = m.DeleteRangeAtOptions(3000, 1000, DeleteRangeOptions{
+	s = m.DrainAtOptions(3000, 1000, DrainOptions{
 		MinExclusive: true,
 		MaxInclusive: false,
 	})
@@ -1074,7 +1074,7 @@ func TestMapDeleteRangeAtIX(t *testing.T) {
 	for i := range 10000 {
 		m.Set(i, i)
 	}
-	s = m.DeleteRangeAtOptions(3000, 1000, DeleteRangeOptions{
+	s = m.DrainAtOptions(3000, 1000, DrainOptions{
 		MinExclusive: true,
 		MaxInclusive: true,
 	})
@@ -1083,7 +1083,7 @@ func TestMapDeleteRangeAtIX(t *testing.T) {
 	for i := range 10000 {
 		m.Set(i, i)
 	}
-	s = m.DeleteRangeAtOptions(3000, 1000, DeleteRangeOptions{
+	s = m.DrainAtOptions(3000, 1000, DrainOptions{
 		MinExclusive: false,
 		MaxInclusive: true,
 	})
@@ -1093,7 +1093,7 @@ func TestMapDeleteRangeAtIX(t *testing.T) {
 		m.Set(i, i)
 	}
 
-	s = m.DeleteRangeAtOptions(3000, 1000, DeleteRangeOptions{
+	s = m.DrainAtOptions(3000, 1000, DrainOptions{
 		MinExclusive: false,
 		MaxInclusive: true,
 		NoReturn:     true,
@@ -1208,7 +1208,7 @@ func TestMapStringKey(t *testing.T) {
 		if start+count > N {
 			count = N - start
 		}
-		s := m.DeleteRangeAt(start, count)
+		s := m.DrainAt(start, count)
 		assert(s.Len() == count)
 		assert(m.Len() == N-count)
 		m.tree.Sane(nil)
@@ -1486,13 +1486,13 @@ func TestSet(t *testing.T) {
 	assert(ok)
 	k2, ok := s.LookupAt(2000)
 	assert(ok)
-	deleted := slices.Collect(s.DeleteRange(k1, k2).All())
+	deleted := slices.Collect(s.Drain(k1, k2).All())
 	assert(len(deleted) == 1000 && slices.IsSorted(deleted))
 	for _, key := range deleted {
 		delete(m, key)
 	}
 
-	deleted = slices.Collect(s.DeleteRangeAt(1000, 1000).All())
+	deleted = slices.Collect(s.DrainAt(1000, 1000).All())
 	assert(len(deleted) == 1000 && slices.IsSorted(deleted))
 	for _, key := range deleted {
 		delete(m, key)
@@ -1526,7 +1526,7 @@ func TestSetDeleteRange(t *testing.T) {
 
 	b2 := b.Clone()
 
-	out := b.DeleteRange(1000, 6000)
+	out := b.Drain(1000, 6000)
 	assert(out.Len() == 5000)
 
 	b.base.tree.Sane(nil)
@@ -1538,7 +1538,7 @@ func TestSetDeleteRange(t *testing.T) {
 	b.base.tree.Sane(nil)
 	assert(b.Len() == 10000)
 
-	out2 := b.DeleteRangeAt(1000, 5000)
+	out2 := b.DrainAt(1000, 5000)
 	assert(out2.Len() == 5000)
 
 	assert(len(slices.Collect(out2.All())) == 5000)
@@ -2039,7 +2039,7 @@ func TestTableDeleteRange(t *testing.T) {
 
 	b2 := b.Clone()
 
-	out := b.DeleteRange(1000, 6000)
+	out := b.Drain(1000, 6000)
 	assert(out.Len() == 5000)
 
 	b.tree.Sane(nil)
@@ -2051,7 +2051,7 @@ func TestTableDeleteRange(t *testing.T) {
 	b.tree.Sane(nil)
 	assert(b.Len() == 10000)
 
-	out2 := b.DeleteRangeAt(1000, 5000)
+	out2 := b.DrainAt(1000, 5000)
 	assert(out2.Len() == 5000)
 
 	assert(len(slices.Collect(out2.All())) == 5000)
@@ -2290,7 +2290,7 @@ func TestList(t *testing.T) {
 	copy(deleted, a.a[2500:7500])
 	a.a = slices.Delete(a.a, 2500, 7500)
 	var deleted2 []int
-	deleted2 = slices.Collect(a.b.DeleteRange(2500, 2500).All())
+	deleted2 = slices.Collect(a.b.Drain(2500, 2500).All())
 	for range 2500 {
 		item, ok := a.b.Delete(2500)
 		assert(ok)
@@ -3852,10 +3852,10 @@ func TestArrayDrain(t *testing.T) {
 	assert(slices.Equal(a0, slices.Collect(b0.All())))
 	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
 	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.Drain())))
+	assert(slices.Equal(a0, slices.Collect(b0.DrainOLD())))
 	assert(b0.Len() == 0)
 	assert(b1.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(b1.DrainBackward())))
+	assert(slices.Equal(a1, slices.Collect(b1.DrainBackwardOLD())))
 	assert(b1.Len() == 0)
 }
 
@@ -3876,136 +3876,11 @@ func TestMapDrain(t *testing.T) {
 	assert(slices.Equal(a0, slices.Collect(iterK(b0.All()))))
 	assert(slices.Equal(a1, slices.Collect(iterK(b0.Backward()))))
 	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(iterK(b0.Drain()))))
+	assert(slices.Equal(a0, slices.Collect(iterK(b0.DrainOLD()))))
 	assert(b0.Len() == 0)
 	assert(b1.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(iterK(b1.DrainBackward()))))
+	assert(slices.Equal(a1, slices.Collect(iterK(b1.DrainBackwardOLD()))))
 	assert(b1.Len() == 0)
-}
-
-func TestSetDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-
-	var b0 Set[int]
-	a0 := rng.Perm(10000)
-	for _, key := range a0 {
-		b0.Insert(key)
-	}
-	slices.Sort(a0)
-	a1 := append([]int{}, a0...)
-	slices.Reverse(a1)
-	b1 := b0.Clone()
-	assert(slices.Equal(a0, slices.Collect(b0.All())))
-	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.Drain())))
-	assert(b0.Len() == 0)
-	assert(b1.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(b1.DrainBackward())))
-	assert(b1.Len() == 0)
-}
-
-func TestTableDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-
-	var b0 Table[int]
-	a0 := rng.Perm(10000)
-	for _, key := range a0 {
-		b0.Insert(key)
-	}
-	slices.Sort(a0)
-	a1 := append([]int{}, a0...)
-	slices.Reverse(a1)
-	b1 := b0.Clone()
-	assert(slices.Equal(a0, slices.Collect(b0.All())))
-	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.Drain())))
-	assert(b0.Len() == 0)
-	assert(b1.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(b1.DrainBackward())))
-	assert(b1.Len() == 0)
-}
-
-func TestQueueDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-	var b0 Queue[int]
-	a0 := rng.Perm(10000)
-	for _, key := range a0 {
-		b0.Push(key)
-	}
-	assert(slices.Equal(a0, slices.Collect(b0.All())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.AllMut())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.Drain())))
-	assert(b0.Len() == 0)
-}
-
-func TestStackDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-	var b0 Stack[int]
-	a0 := rng.Perm(10000)
-	for _, key := range a0 {
-		b0.Push(key)
-	}
-	slices.Reverse(a0)
-	assert(slices.Equal(a0, slices.Collect(b0.All())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.AllMut())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.Drain())))
-	assert(b0.Len() == 0)
-}
-
-func TestDequeDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-
-	var b0 Deque[int]
-	a0 := rng.Perm(10000)
-	a1 := append([]int{}, a0...)
-	slices.Reverse(a1)
-	for _, key := range a0 {
-		b0.PushBack(key)
-	}
-	b1 := b0.Clone()
-	assert(slices.Equal(a0, slices.Collect(b0.All())))
-	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.Drain())))
-	assert(b0.Len() == 0)
-	assert(b1.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(b1.DrainBackward())))
-	assert(b1.Len() == 0)
-}
-
-func TestPriqueDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-
-	var b0 Prique[int]
-	a0 := rng.Perm(10000)
-	for _, key := range a0 {
-		b0.Push(key)
-	}
-	slices.Sort(a0)
-	a1 := append([]int{}, a0...)
-	slices.Reverse(a1)
-	assert(slices.Equal(a1, slices.Collect(b0.All())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(b0.Drain())))
-	assert(b0.Len() == 0)
 }
 
 func testPrique(t *testing.T, initopts int) {
@@ -4092,10 +3967,17 @@ func testPrique(t *testing.T, initopts int) {
 	}))
 
 	item2, ok = b.Front()
-	for item := range b.Drain() {
+	for {
+		item, ok := b.Front()
+		assert(item.key == item2.key && ok)
+		item, ok = b.Pop()
 		assert(item.key == item2.key && ok)
 		break
 	}
+	// for item := range b.Drain() {
+	// 	assert(item.key == item2.key && ok)
+	// 	break
+	// }
 
 	item, ok := b.Front()
 	item2, ok2 := b.Pop()
@@ -4201,15 +4083,15 @@ func TestDeque(t *testing.T) {
 	assert(item == a[len(a)-1] && ok)
 
 	assert(b2.Len() == len(a))
-	assert(slices.Equal(a1, slices.Collect(b2.DrainBackward())))
-	assert(b2.Len() == 0)
+	// assert(slices.Equal(a1, slices.Collect(b2.DrainBackwardOLD())))
+	// assert(b2.Len() == 0)
 	b2.Release()
 	assert(b2.Len() == 0)
 
-	assert(b.Len() == len(a)-2)
+	// assert(b.Len() == len(a)-2)
 
-	assert(slices.Equal(a[1:len(a)-1], slices.Collect(b.Drain())))
-	assert(b.Len() == 0)
+	// assert(slices.Equal(a[1:len(a)-1], slices.Collect(b.DrainOLD())))
+	// assert(b.Len() == 0)
 	b.Clear()
 	assert(b.Len() == 0)
 
@@ -4644,6 +4526,7 @@ func TestQueue2(t *testing.T) {
 	assert(q.Contains(50))
 	assert(!q.Contains(100))
 	assert(strings.Contains(q.String(), " 50 "))
+	assert(slices.Equal(slices.Collect(q.AllMut()), slices.Collect(q.All())))
 }
 
 func TestSet2(t *testing.T) {
@@ -4739,6 +4622,7 @@ func TestStack2(t *testing.T) {
 	assert(q.Contains(99))
 	assert(!q.Contains(100))
 	assert(q.String() == fmt.Sprintf("stack%v", slices.Collect(q.All())))
+	assert(slices.Equal(slices.Collect(q.AllMut()), slices.Collect(q.All())))
 }
 
 func TestTable2(t *testing.T) {

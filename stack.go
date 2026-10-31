@@ -118,10 +118,6 @@ func (b *Stack[T]) AllMut() iter.Seq[T] {
 	return iterV(b.tree.BackwardMut())
 }
 
-func (b *Stack[K]) Drain() iter.Seq[K] {
-	return iterV(b.tree.DrainBackward())
-}
-
 func (b *Stack[K]) Contains(item K) bool {
 	cmp := CompareFor[K]()
 	for vitem := range b.All() {

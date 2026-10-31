@@ -62,8 +62,6 @@ Ascend(key)             # Iterate items in ascending order >= to key.  (iter.Seq
 Descend(key)            # Iterate items in descending order <= to key. (iter.Seq2[K,V])
 Keys()                  # Iterate key only in ascending order.         (iter.Seq[K])
 Values()                # Iterate values only in ascending order.      (iter.Seq[K])
-Drain()                 # Iterate and remove in ascending order.       (iter.Seq2[K,V])
-DrainBackward()         # Iterate and remove in descending order.      (iter.Seq2[K,V])
 
 PushFront(key, val)     # Insert item to front of map.
 PushBack(key, val)      # Insert item to back of map.
@@ -82,8 +80,8 @@ DeleteAt(i)             # Remove an item at index.
 AscendAt(i)             # Iterate items in ascending order >= to index.  (iter.Seq2[K,V])
 DescendAt(i)            # Iterate items in descending order <= to index. (iter.Seq2[K,V])
 
-DeleteRange(min, max)   # Remove items within the provided sub-range. [min,max)
-DeleteRangeAt(i, count) # Remove items starting at index.
+Drain(min, max)         # Remove and extract items within the provided sub-range. [min,max)
+DrainAt(i, count)       # Remove and extract items starting at index.
 
 Action(key, actfunc)    # Perform action (replace/delete) using custom function
 DeleteFunc(delfunc)     # Delete item using custom function
@@ -171,8 +169,6 @@ All()                   # Iterate keys in ascending order.            (iter.Seq[
 Backward()              # Iterate keys in descending order.           (iter.Seq[K])
 Ascend(key)             # Iterate keys in ascending order >= to key.  (iter.Seq[K])
 Descend(key)            # Iterate keys in descending order <= to key. (iter.Seq[K])
-Drain()                 # Iterate and remove in ascending order.      (iter.Seq[K])
-DrainBackward()         # Iterate and remove in descending order.     (iter.Seq[K])
 
 Seek(key)               # Searches for the first key that is >= to key
 SeekNext(key)           # Searches for the first key that is > key
@@ -193,8 +189,8 @@ DeleteAt(i)             # Remove key at index
 AscendAt(i)             # Iterate keys in ascending order >= to index. (iter.Seq[K])
 DescendAt(i)            # Iterate key in descending order <= to index. (iter.Seq[K])
 
-DeleteRange(min, max)   # Remove keys within the provided sub-range. [min,max)
-DeleteRangeAt(i, count) # Remove keys starting at index
+Drain(min, max)         # Remove and extract keys within the provided sub-range. [min,max)
+DrainAt(i, count)       # Remove and extract keys starting at index
 
 DeleteFunc(delfunc)     # Delete item using custom function
 
@@ -292,8 +288,6 @@ All()                 # Iterate items in ascending order.              (iter.Seq
 Backward()            # Iterate items in descending order.             (iter.Seq[T])
 Ascend(i)             # Iterate items in ascending order >= to index.  (iter.Seq[T])
 Descend(i)            # Iterate items in descending order <= to index. (iter.Seq[T])
-Drain()               # Iterate and remove in ascending order.         (iter.Seq[T])
-DrainBackward()       # Iterate and remove in descending order.        (iter.Seq[T])
 
 PushFront(item)       # Insert item to front of collection.
 PushBack(item)        # Insert item to back of collection.
@@ -304,7 +298,7 @@ Back()                # Get the last item.
 PopFrontFunc(cond)    # Remove first item if cond returns true.
 PopBackFunc(cond)     # Remove last item if cond returns true.
 
-DeleteRange(i, count) # Remove items starting at index.
+Drain(i, count)       # Remove and extract items starting at index.
 
 Len()                 # Get the number of items in collection.
 Clone()               # Clone collection, fast O(1), uses Copy-on-write shadow cloning.
@@ -577,8 +571,6 @@ All()                   # Iterate items in ascending order.            (iter.Seq
 Backward()              # Iterate items in descending order.           (iter.Seq[T])
 Ascend(key)             # Iterate items in ascending order >= to key.  (iter.Seq[T])
 Descend(key)            # Iterate items in descending order <= to key. (iter.Seq[T])
-Drain()                 # Iterate and remove in ascending order.       (iter.Seq[T])
-DrainBackward()         # Iterate and remove in descending order.      (iter.Seq[T])
 
 PushFront(item)         # Insert item to front of table.
 PushBack(item)          # Insert item to back of table.
@@ -597,8 +589,8 @@ DeleteAt(i)             # Remove an item at index.
 AscendAt(i)             # Iterate items in ascending order >= to index.  (iter.Seq[T])
 DescendAt(i)            # Iterate items in descending order <= to index. (iter.Seq[T])
 
-DeleteRange(min, max)   # Remove items within the provided sub-range. [min,max)
-DeleteRangeAt(i, count) # Remove items starting at index.
+Drain(min, max)         # Remove and extract items within the provided sub-range. [min,max)
+DrainAt(i, count)       # Remove and extract items starting at index.
 
 Len()                   # Get the number of items in collection.
 Clone()                 # Clone collection, fast O(1), uses Copy-on-write shadow cloning.

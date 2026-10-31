@@ -451,7 +451,7 @@ func (t *tree[K, V]) BackwardMut() iter.Seq2[K, V] {
 	}
 }
 
-func (t *tree[K, V]) Drain() iter.Seq2[K, V] {
+func (t *tree[K, V]) DrainOLD() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		for {
 			k, v, ok := t.PopFront()
@@ -462,7 +462,7 @@ func (t *tree[K, V]) Drain() iter.Seq2[K, V] {
 	}
 }
 
-func (t *tree[K, V]) DrainBackward() iter.Seq2[K, V] {
+func (t *tree[K, V]) DrainBackwardOLD() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		for {
 			k, v, ok := t.PopBack()
@@ -1477,8 +1477,8 @@ func (t *tree[K, V]) DescendAtMut(index int) iter.Seq2[K, V] {
 	}
 }
 
-// Slice2 is a slice of items that can be iterated forward or backward.
-type Slice2[K, V any] interface {
+// Extract2 is a slice of items that can be iterated forward or backward.
+type Extract2[K, V any] interface {
 	Len() int
 	All() iter.Seq2[K, V]
 	Backward() iter.Seq2[K, V]
@@ -1486,32 +1486,32 @@ type Slice2[K, V any] interface {
 	Values() iter.Seq[V]
 }
 
-// Slice is a slice of items that can be iterated forward or backward.
-type Slice[V any] interface {
+// Extract is a slice of items that can be iterated forward or backward.
+type Extract[V any] interface {
 	Len() int
 	All() iter.Seq[V]
 	Backward() iter.Seq[V]
 }
 
-// slice2 is a binary tree of nodes and/or items
-type slice2[K, V any] struct {
+// extract2 is a binary tree of nodes and/or items
+type extract2[K, V any] struct {
 	count   int
-	entries []sliceEntry[K, V]
-	left    *slice2[K, V]
-	right   *slice2[K, V]
+	entries []extractEntry[K, V]
+	left    *extract2[K, V]
+	right   *extract2[K, V]
 }
 
-type slice2Item[K, V any] struct {
+type extract2Item[K, V any] struct {
 	key   K
 	value V
 }
 
-type sliceEntry[K, V any] struct {
-	node  *node[K, V]        // node first ...
-	items []slice2Item[K, V] // .. then items
+type extractEntry[K, V any] struct {
+	node  *node[K, V]          // node first ...
+	items []extract2Item[K, V] // .. then items
 }
 
-func (s *slice2[K, V]) all0(yield func(K, V) bool) bool {
+func (s *extract2[K, V]) all0(yield func(K, V) bool) bool {
 	if s.left != nil && !s.left.all0(yield) {
 		return false
 	}
@@ -1533,7 +1533,7 @@ func (s *slice2[K, V]) all0(yield func(K, V) bool) bool {
 	return true
 }
 
-func (s *slice2[K, V]) backward0(yield func(K, V) bool) bool {
+func (s *extract2[K, V]) backward0(yield func(K, V) bool) bool {
 	if s.right != nil && !s.right.backward0(yield) {
 		return false
 	}
@@ -1556,20 +1556,20 @@ func (s *slice2[K, V]) backward0(yield func(K, V) bool) bool {
 	return true
 }
 
-func (s *slice2[K, V]) pushItem(key K, value V) {
+func (s *extract2[K, V]) pushItem(key K, value V) {
 	if len(s.entries) == 0 {
-		s.entries = append(s.entries, sliceEntry[K, V]{})
+		s.entries = append(s.entries, extractEntry[K, V]{})
 	}
 	s.entries[len(s.entries)-1].items =
-		append(s.entries[len(s.entries)-1].items, slice2Item[K, V]{key, value})
+		append(s.entries[len(s.entries)-1].items, extract2Item[K, V]{key, value})
 	s.count++
 }
-func (s *slice2[K, V]) pushNode(n *node[K, V], count int) {
-	s.entries = append(s.entries, sliceEntry[K, V]{node: n})
+func (s *extract2[K, V]) pushNode(n *node[K, V], count int) {
+	s.entries = append(s.entries, extractEntry[K, V]{node: n})
 	s.count += count
 }
 
-func (s *slice2[K, V]) All() iter.Seq2[K, V] {
+func (s *extract2[K, V]) All() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		if s != nil {
 			s.all0(yield)
@@ -1577,7 +1577,7 @@ func (s *slice2[K, V]) All() iter.Seq2[K, V] {
 	}
 }
 
-func (s *slice2[K, V]) Keys() iter.Seq[K] {
+func (s *extract2[K, V]) Keys() iter.Seq[K] {
 	return func(yield func(K) bool) {
 		if s != nil {
 			s.all0(func(key K, _ V) bool {
@@ -1587,7 +1587,7 @@ func (s *slice2[K, V]) Keys() iter.Seq[K] {
 	}
 }
 
-func (s *slice2[K, V]) Values() iter.Seq[V] {
+func (s *extract2[K, V]) Values() iter.Seq[V] {
 	return func(yield func(V) bool) {
 		if s != nil {
 			s.all0(func(_ K, value V) bool {
@@ -1597,7 +1597,7 @@ func (s *slice2[K, V]) Values() iter.Seq[V] {
 	}
 }
 
-func (s *slice2[K, V]) Backward() iter.Seq2[K, V] {
+func (s *extract2[K, V]) Backward() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		if s != nil {
 			s.backward0(yield)
@@ -1605,7 +1605,7 @@ func (s *slice2[K, V]) Backward() iter.Seq2[K, V] {
 	}
 }
 
-func (s *slice2[K, V]) Len() int {
+func (s *extract2[K, V]) Len() int {
 	if s == nil {
 		return 0
 	}
@@ -1618,7 +1618,7 @@ type delrange struct {
 }
 
 func (t *tree[K, V]) nodeDeleteRangeAt(n *node[K, V], offset, index, count int,
-	list *slice2[K, V], depth int, noret bool,
+	list *extract2[K, V], depth int, noret bool,
 ) (dr delrange) {
 	var emptyKey K
 	var emptyValue V
@@ -1767,7 +1767,7 @@ func (t *tree[K, V]) nodeDeleteRangeAt(n *node[K, V], offset, index, count int,
 }
 
 func (t *tree[K, V]) deleteRangeAt1(index, count int, noret bool,
-) (list slice2[K, V], dr delrange) {
+) (list extract2[K, V], dr delrange) {
 	if t.count > 0 {
 		t.cowRoot(true)
 		dr = t.nodeDeleteRangeAt(t.root, 0, index, count, &list, 0, noret)
@@ -1777,7 +1777,7 @@ func (t *tree[K, V]) deleteRangeAt1(index, count int, noret bool,
 	return list, dr
 }
 
-func (t *tree[K, V]) deleteRangeAt0(index, count int, noret bool) slice2[K, V] {
+func (t *tree[K, V]) deleteRangeAt0(index, count int, noret bool) extract2[K, V] {
 	end := index + count
 	list, dr := t.deleteRangeAt1(index, count, noret)
 	drend := dr.start + dr.count
@@ -1798,15 +1798,15 @@ func (t *tree[K, V]) deleteRangeAt0(index, count int, noret bool) slice2[K, V] {
 	return list
 }
 
-// DeleteRangeOptions for deleting a range of items from a collection.
-type DeleteRangeOptions struct {
+// DrainOptions for deleting a range of items from a collection.
+type DrainOptions struct {
 	NoReturn     bool // Do not return items
 	MinExclusive bool // Exclude the min arg
 	MaxInclusive bool // Include the max arg
 }
 
-func (t *tree[K, V]) DeleteRangeAt(index, count int, opts DeleteRangeOptions,
-) Slice2[K, V] {
+func (t *tree[K, V]) DrainAt(index, count int, opts DrainOptions,
+) Extract2[K, V] {
 	noret := opts.NoReturn
 	if opts.MinExclusive {
 		index++
@@ -1825,10 +1825,10 @@ func (t *tree[K, V]) DeleteRangeAt(index, count int, opts DeleteRangeOptions,
 		count = t.count - index
 	}
 	if count == 0 {
-		return (*slice2[K, V])(nil)
+		return (*extract2[K, V])(nil)
 	}
 	if index == 0 && count == t.count {
-		var list slice2[K, V]
+		var list extract2[K, V]
 		if !noret {
 			list.pushNode(t.root, t.count)
 		}
@@ -1837,14 +1837,14 @@ func (t *tree[K, V]) DeleteRangeAt(index, count int, opts DeleteRangeOptions,
 	}
 	list := t.deleteRangeAt0(index, count, noret)
 	if noret {
-		return (*slice2[K, V])(nil)
+		return (*extract2[K, V])(nil)
 	}
 	return &list
 }
 
-func (t *tree[K, V]) DeleteRange(minKey K, minValue V, maxKey K, maxValue V,
-	opts DeleteRangeOptions,
-) Slice2[K, V] {
+func (t *tree[K, V]) Drain(minKey K, minValue V, maxKey K, maxValue V,
+	opts DrainOptions,
+) Extract2[K, V] {
 	start, ok := t.IndexOf(minKey, minValue)
 	if ok && opts.MinExclusive {
 		start++
@@ -1855,7 +1855,7 @@ func (t *tree[K, V]) DeleteRange(minKey K, minValue V, maxKey K, maxValue V,
 	}
 	opts.MinExclusive = false
 	opts.MaxInclusive = false
-	return t.DeleteRangeAt(start, end-start, opts)
+	return t.DrainAt(start, end-start, opts)
 }
 
 type slice[T any] struct{ base any }
@@ -1864,13 +1864,13 @@ func (s *slice[T]) All() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		if s != nil {
 			switch s := s.base.(type) {
-			case *slice2[T, omit]:
+			case *extract2[T, omit]:
 				for k := range s.All() {
 					if !yield(k) {
 						break
 					}
 				}
-			case *slice2[omit, T]:
+			case *extract2[omit, T]:
 				for _, v := range s.All() {
 					if !yield(v) {
 						break
@@ -1885,13 +1885,13 @@ func (s *slice[T]) Backward() iter.Seq[T] {
 	return func(yield func(T) bool) {
 		if s != nil {
 			switch s := s.base.(type) {
-			case *slice2[T, omit]:
+			case *extract2[T, omit]:
 				for k := range s.Backward() {
 					if !yield(k) {
 						break
 					}
 				}
-			case *slice2[omit, T]:
+			case *extract2[omit, T]:
 				for _, v := range s.Backward() {
 					if !yield(v) {
 						break
@@ -1905,16 +1905,16 @@ func (s *slice[T]) Backward() iter.Seq[T] {
 func (s *slice[T]) Len() int {
 	if s != nil {
 		switch s := s.base.(type) {
-		case *slice2[T, omit]:
+		case *extract2[T, omit]:
 			return s.Len()
-		case *slice2[omit, T]:
+		case *extract2[omit, T]:
 			return s.Len()
 		}
 	}
 	return 0
 }
 
-func sliceK[T any](s2 Slice2[T, omit]) *slice[T] {
+func sliceK[T any](s2 Extract2[T, omit]) *slice[T] {
 	var s1 *slice[T]
 	if s2 != nil {
 		s1 = &slice[T]{s2}
@@ -1922,7 +1922,7 @@ func sliceK[T any](s2 Slice2[T, omit]) *slice[T] {
 	return s1
 }
 
-func sliceV[T any](s2 Slice2[omit, T]) *slice[T] {
+func sliceV[T any](s2 Extract2[omit, T]) *slice[T] {
 	var s1 *slice[T]
 	if s2 != nil {
 		s1 = &slice[T]{s2}

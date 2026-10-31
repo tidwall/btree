@@ -364,23 +364,21 @@ func (b *Table[T]) DescendAtMut(index int) iter.Seq[T] {
 	return iterV(b.tree.DescendAtMut(index))
 }
 
-func (b *Table[T]) DeleteRangeAtOptions(index, count int,
-	opts DeleteRangeOptions,
-) Slice[T] {
-	return sliceV(b.tree.DeleteRangeAt(index, count, opts))
+func (b *Table[T]) DrainAtOptions(index, count int, opts DrainOptions,
+) Extract[T] {
+	return sliceV(b.tree.DrainAt(index, count, opts))
 }
 
-func (b *Table[T]) DeleteRangeOptions(min, max T, opts DeleteRangeOptions,
-) Slice[T] {
-	return sliceV(b.tree.DeleteRange(omit{}, min, omit{}, max, opts))
+func (b *Table[T]) DrainOptions(min, max T, opts DrainOptions) Extract[T] {
+	return sliceV(b.tree.Drain(omit{}, min, omit{}, max, opts))
 }
 
-func (b *Table[T]) DeleteRangeAt(index, count int) Slice[T] {
-	return b.DeleteRangeAtOptions(index, count, DeleteRangeOptions{})
+func (b *Table[T]) DrainAt(index, count int) Extract[T] {
+	return b.DrainAtOptions(index, count, DrainOptions{})
 }
 
-func (b *Table[T]) DeleteRange(min, max T) Slice[T] {
-	return b.DeleteRangeOptions(min, max, DeleteRangeOptions{})
+func (b *Table[T]) Drain(min, max T) Extract[T] {
+	return b.DrainOptions(min, max, DrainOptions{})
 }
 
 func (b *Table[T]) Len() int {
@@ -400,14 +398,6 @@ func (b *Table[T]) Clone() *Table[T] {
 	*b2 = *b
 	b.tree.CloneInto(&b2.tree)
 	return b2
-}
-
-func (b *Table[T]) Drain() iter.Seq[T] {
-	return iterV(b.tree.Drain())
-}
-
-func (b *Table[T]) DrainBackward() iter.Seq[T] {
-	return iterV(b.tree.DrainBackward())
 }
 
 ////////////////////////////////////////////////////////////////////////////////

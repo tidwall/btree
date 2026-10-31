@@ -129,11 +129,6 @@ func (b *Queue[T]) AllMut() iter.Seq[T] {
 	return iterV(b.tree.AllMut())
 }
 
-// Drain removes all items from queue and returns them as an iterator.
-func (b *Queue[T]) Drain() iter.Seq[T] {
-	return iterV(b.tree.Drain())
-}
-
 // Contains returns true if item exists.
 func (b *Queue[T]) Contains(item T) bool {
 	cmp := CompareFor[T]()
