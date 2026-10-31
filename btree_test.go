@@ -4771,8 +4771,6 @@ func TestTable2(t *testing.T) {
 // Abstract interface requirements
 //////////////////////////////////////////////////////////////////////////////
 
-// _AbstractCollection models a collection C of elements E,
-// such as *hash.Map, *hash.Set, *ordered.Map, or set.Set.
 type _AbstractCollection[E any, C _AbstractCollection[E, C]] interface {
 	Clear()
 	Clone() C
@@ -4781,8 +4779,6 @@ type _AbstractCollection[E any, C _AbstractCollection[E, C]] interface {
 	String() string
 }
 
-// _AbstractMap models a mapping M from keys K to values V,
-// such as *hash.Map or *ordered.Map.
 type _AbstractMap[K, V any, M _AbstractMap[K, V, M]] interface {
 	_AbstractCollection[K, M]
 
@@ -4796,8 +4792,6 @@ type _AbstractMap[K, V any, M _AbstractMap[K, V, M]] interface {
 	Values() iter.Seq[V]
 }
 
-// _AbstractSet models a set S of elements E,
-// such as *hash.Set, or set.Set.
 type _AbstractSet[E any, S _AbstractSet[E, S]] interface {
 	_AbstractCollection[E, S]
 
