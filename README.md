@@ -40,6 +40,7 @@ go get github.com/tidwall/btree/v2
   - Locking and mutexes have been removed from all btrees.
   - DeleteRange() has been renamed to Drain()
   - Insert() and Replace() are available along with the traditional Set()
+  - The `btree.BtreeG` type is now `btree.Table`
 </details>
 
 <!---------------------------------------------------------------------------
@@ -378,8 +379,7 @@ func main() {
 
 ## Table
 
-btree.Table is a general purpose btree collection for storing sorted data.  
-_In the previous version v1.0 this was called `BtreeG`._
+btree.Table is a general purpose btree collection for storing sorted data.
 
 ### Features
 
