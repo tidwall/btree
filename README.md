@@ -20,10 +20,10 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 
   - Callbacks iteration now uses the modern Go `iter.Seq`
   - Get() now returns one value. For the two value return use Lookup()
-  - Locking and mutexes have been removed from all btrees.
+  - The `btree.BtreeG` type is now `btree.Table`
   - DeleteRange() has been renamed to Drain()
   - Insert() and Replace() are available along with the traditional Set()
-  - The `btree.BtreeG` type is now `btree.Table`
+  - Locking and mutexes have been removed from all btrees
 </details>
 
 
