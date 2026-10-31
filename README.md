@@ -9,7 +9,7 @@ An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 
   - Callbacks iteration now uses the modern Go `iter.Seq`
   - Get() now returns one value. For the two value return use Lookup()
-  - Locking and mutexes have been removed from all btrees. You are not responsible for goroutine synchronization.
+  - Locking and mutexes have been removed from all btrees.
   - DeleteRange() has been renamed to Drain()
   - Insert() and Replace() are available along with the traditional Set()
 </details>
