@@ -19,8 +19,8 @@ const minItems = maxItems / 2
 
 type tree[K, V any] struct {
 	cloned      bool        // Clone() called at least once during life of tree.
+	strprefix   bool        // Use string prefixes, K _MUST_ be a string.
 	initd       bool        // flag used by outer types
-	bops        bool        // flag used by outer types
 	count       int         // total tree count
 	root        *node[K, V] // root node
 	dataCopy    func(V) V   // Value data copy-on-write
@@ -40,11 +40,18 @@ type node[K, V any] struct {
 type branch[K, V any] struct {
 	children [maxItems + 1]*node[K, V] // all child nodes
 	counts   [maxItems + 1]int         // all child counts
+	prefixes *[maxItems]uint64         // string prefixes
 }
 
 type branchAlloc[K, V any] struct {
 	node   node[K, V]
 	branch branch[K, V]
+}
+
+type branchPrefixAlloc[K, V any] struct {
+	node     node[K, V]
+	branch   branch[K, V]
+	prefixes [maxItems]uint64
 }
 
 type omit struct{}
@@ -53,6 +60,11 @@ func (t *tree[K, V]) newNode(leaf bool) *node[K, V] {
 	var n *node[K, V]
 	if leaf {
 		n = new(node[K, V])
+	} else if t.strprefix {
+		b := new(branchPrefixAlloc[K, V])
+		b.node.branch = &b.branch
+		b.node.branch.prefixes = &b.prefixes
+		n = (*node[K, V])(unsafe.Pointer(b))
 	} else {
 		b := new(branchAlloc[K, V])
 		b.node.branch = &b.branch

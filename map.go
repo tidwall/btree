@@ -94,7 +94,7 @@ func (b *Map[K, V]) init0() {
 		if _, ok := any(key).(string); ok {
 			// Use standard operations with binary search.
 			b.tree.dataSearch = mapBinarySearch
-			b.tree.bops = true
+			b.tree.strprefix = true
 		}
 	}
 	if b.tree.dataSearch == nil {
@@ -424,7 +424,7 @@ func mapDelete[K cmp.Ordered, V any](b *Map[K, V], key K) (V, bool) {
 // Insert new item.
 // Returns true if inserted or false if already exists.
 func (b *Map[K, V]) Insert(key K, value V) (V, bool) {
-	if b.tree.bops {
+	if b.tree.strprefix {
 		return b.tree.Insert(key, value)
 	}
 	return mapInsert(b, key, value)
@@ -433,7 +433,7 @@ func (b *Map[K, V]) Insert(key K, value V) (V, bool) {
 // Replace existing item
 // Returns true if replaced, of false if not exists.
 func (b *Map[K, V]) Replace(key K, value V) (V, bool) {
-	if b.tree.bops {
+	if b.tree.strprefix {
 		return b.tree.Replace(key, value)
 	}
 	return mapReplace(b, key, value)
@@ -442,7 +442,7 @@ func (b *Map[K, V]) Replace(key K, value V) (V, bool) {
 // Set inserts or replaces item.
 // Returns true if replaced or false if inserted
 func (b *Map[K, V]) Set(key K, value V) (V, bool) {
-	if b.tree.bops {
+	if b.tree.strprefix {
 		return b.tree.Set(key, value)
 	}
 	return mapSet(b, key, value)
@@ -450,7 +450,7 @@ func (b *Map[K, V]) Set(key K, value V) (V, bool) {
 
 // Delete item
 func (b *Map[K, V]) Delete(key K) (V, bool) {
-	if b.tree.bops {
+	if b.tree.strprefix {
 		var emptyValue V
 		return b.tree.Delete(key, emptyValue)
 	}
@@ -485,7 +485,7 @@ func (b *Map[K, V]) Contains(key K) bool {
 // Lookup an item
 // Returns true if found or false if not found
 func (b *Map[K, V]) Lookup(key K) (V, bool) {
-	if b.tree.bops {
+	if b.tree.strprefix {
 		var emptyValue V
 		return b.tree.Lookup(key, emptyValue)
 	}
@@ -496,7 +496,7 @@ func (b *Map[K, V]) Lookup(key K) (V, bool) {
 // Returns true if found or false if not found
 // MUTABLE OPERATION
 func (b *Map[K, V]) LookupMut(key K) (V, bool) {
-	if b.tree.bops {
+	if b.tree.strprefix {
 		var emptyValue V
 		return b.tree.LookupMut(key, emptyValue)
 	}
