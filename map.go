@@ -68,20 +68,37 @@ func mapSearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
 
 func mapBinarySearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
 ) (i int, found bool) {
-	// if key > mapKeyAt(p, len-1) {
-	// 	return len, false
+	// items := unsafe.Slice(p, len0)
+	// key := indirectOffset[T, O](vkey, offset)
+	// low, high := 0, len(items)
+	// for low < high {
+	// 	h := (low + high) >> 1
+	// 	c := cmp.Compare(key, indirectOffset[T, O](items[h], offset))
+	// 	c *= int(dir)
+	// 	if c < 0 {
+	// 		high = h
+	// 	} else if c > 0 {
+	// 		low = h + 1
+	// 	} else {
+	// 		return h, true
+	// 	}
 	// }
+	// return low, false
+
+	if key > mapKeyAt(p, len-1) {
+		return len, false
+	}
 	low, high := 0, len
 	for low < high {
 		h := (low + high) >> 1
-		if !(key < mapKeyAt(p, h)) {
+		c := cmp.Compare(key, mapKeyAt(p, h))
+		if c < 0 {
+			high = h
+		} else if c > 0 {
 			low = h + 1
 		} else {
-			high = h
+			return h, true
 		}
-	}
-	if low > 0 && !(mapKeyAt(p, low-1) < key) {
-		return low - 1, true
 	}
 	return low, false
 }
