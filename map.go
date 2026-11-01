@@ -68,9 +68,9 @@ func mapSearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
 
 func mapBinarySearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
 ) (i int, found bool) {
-	// if key > mapKeyAt(p, len-1) {
-	// 	return len, false
-	// }
+	if key > mapKeyAt(p, len-1) {
+		return len, false
+	}
 	low, high := 0, len
 	for low < high {
 		h := (low + high) >> 1
