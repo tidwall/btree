@@ -13,7 +13,7 @@ import (
 	"unsafe"
 )
 
-const fanout = 32
+const fanout = 64
 const maxItems = fanout - 1
 const minItems = maxItems / 2
 
