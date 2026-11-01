@@ -66,10 +66,36 @@ func mapSearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
 	return i, key == mapKeyAt(p, i)
 }
 
+func mapBinarySearch[K cmp.Ordered, V any](len int, p *K, _ *V, key K, _ V,
+) (i int, found bool) {
+	if key > mapKeyAt(p, len-1) {
+		return len, false
+	}
+	low, high := 0, len
+	for low < high {
+		h := (low + high) >> 1
+		if !(key < mapKeyAt(p, h)) {
+			low = h + 1
+		} else {
+			high = h
+		}
+	}
+	if low > 0 && !(mapKeyAt(p, low-1) < key) {
+		return low - 1, true
+	}
+	return low, false
+}
+
 //go:noinline
 func (b *Map[K, V]) init0() {
 	if b.tree.dataCompare == nil {
 		b.tree.dataCompare = mapCompare
+		var key K
+		if _, ok := any(key).(string); ok {
+			// Use standard operations with binary search.
+			b.tree.dataSearch = mapBinarySearch
+			b.tree.bops = true
+		}
 	}
 	if b.tree.dataSearch == nil {
 		b.tree.dataSearch = mapSearch
@@ -304,6 +330,33 @@ func mapLookup[K cmp.Ordered, V any](b *Map[K, V], key K) (V, bool) {
 	}
 }
 
+func mapLookupMut[K cmp.Ordered, V any](b *Map[K, V], key K) (V, bool) {
+	var emptyValue V
+	if b.tree.count == 0 {
+		return emptyValue, false
+	}
+	b.tree.cowRoot(true)
+	n := b.tree.root
+	for {
+		i := 0
+		if key > n.keyAt(n.len-1) {
+			i = n.len
+		} else {
+			for key > n.keyAt(i) {
+				i++
+			}
+			if key == n.keyAt(i) {
+				return n.values[i], true
+			}
+		}
+		if n.leaf() {
+			return emptyValue, false
+		}
+		b.tree.cowChild(n, i, true)
+		n = n.branch.children[i]
+	}
+}
+
 func (b *Map[K, V]) nodeDelete(n *node[K, V], key K) (V, bool) {
 	var emptyKey K
 	var emptyValue V
@@ -371,23 +424,36 @@ func mapDelete[K cmp.Ordered, V any](b *Map[K, V], key K) (V, bool) {
 // Insert new item.
 // Returns true if inserted or false if already exists.
 func (b *Map[K, V]) Insert(key K, value V) (V, bool) {
+	if b.tree.bops {
+		return b.tree.Insert(key, value)
+	}
 	return mapInsert(b, key, value)
 }
 
 // Replace existing item
 // Returns true if replaced, of false if not exists.
 func (b *Map[K, V]) Replace(key K, value V) (V, bool) {
+	if b.tree.bops {
+		return b.tree.Replace(key, value)
+	}
 	return mapReplace(b, key, value)
 }
 
 // Set inserts or replaces item.
 // Returns true if replaced or false if inserted
 func (b *Map[K, V]) Set(key K, value V) (V, bool) {
+	if b.tree.bops {
+		return b.tree.Set(key, value)
+	}
 	return mapSet(b, key, value)
 }
 
 // Delete item
 func (b *Map[K, V]) Delete(key K) (V, bool) {
+	if b.tree.bops {
+		var emptyValue V
+		return b.tree.Delete(key, emptyValue)
+	}
 	return mapDelete(b, key)
 }
 
@@ -419,6 +485,10 @@ func (b *Map[K, V]) Contains(key K) bool {
 // Lookup an item
 // Returns true if found or false if not found
 func (b *Map[K, V]) Lookup(key K) (V, bool) {
+	if b.tree.bops {
+		var emptyValue V
+		return b.tree.Lookup(key, emptyValue)
+	}
 	return mapLookup(b, key)
 }
 
@@ -426,30 +496,11 @@ func (b *Map[K, V]) Lookup(key K) (V, bool) {
 // Returns true if found or false if not found
 // MUTABLE OPERATION
 func (b *Map[K, V]) LookupMut(key K) (V, bool) {
-	var emptyValue V
-	if b.tree.count == 0 {
-		return emptyValue, false
+	if b.tree.bops {
+		var emptyValue V
+		return b.tree.LookupMut(key, emptyValue)
 	}
-	b.tree.cowRoot(true)
-	n := b.tree.root
-	for {
-		i := 0
-		if key > n.keyAt(n.len-1) {
-			i = n.len
-		} else {
-			for key > n.keyAt(i) {
-				i++
-			}
-			if key == n.keyAt(i) {
-				return n.values[i], true
-			}
-		}
-		if n.leaf() {
-			return emptyValue, false
-		}
-		b.tree.cowChild(n, i, true)
-		n = n.branch.children[i]
-	}
+	return mapLookupMut(b, key)
 }
 
 // Get an item

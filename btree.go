@@ -18,8 +18,9 @@ const maxItems = fanout - 1
 const minItems = maxItems / 2
 
 type tree[K, V any] struct {
-	cloned      bool        // Copy called at least once during life of tree.
-	initd       bool        // Flag used by outer types
+	cloned      bool        // Clone() called at least once during life of tree.
+	initd       bool        // flag used by outer types
+	bops        bool        // flag used by outer types
 	count       int         // total tree count
 	root        *node[K, V] // root node
 	dataCopy    func(V) V   // Value data copy-on-write
