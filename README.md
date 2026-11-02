@@ -1,7 +1,3 @@
-> [!IMPORTANT]
-> **Version 2 was released on 2 Nov 2026.
-> There are [major changes](#migrating-from-v1-to-v2) if you coming from an [older version](https://github.com/tidwall/btree/tree/v1).** 
-
 # btree
 
 [![GoDoc](https://godoc.org/github.com/tidwall/btree/v2?status.svg)](https://godoc.org/github.com/tidwall/btree/v2)
