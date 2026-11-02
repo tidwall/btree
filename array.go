@@ -251,17 +251,6 @@ func (b *Array[T]) Append(items ...T) {
 	}
 }
 
-// DrainOLD removes all items and returns them as an iterable sequence.
-func (b *Array[T]) DrainOLD() iter.Seq[T] {
-	return iterV(b.tree.DrainOLD())
-}
-
-// DrainBackwardOLD removes all items and returns them as an iterable sequence in
-// reverse order.
-func (b *Array[T]) DrainBackwardOLD() iter.Seq[T] {
-	return iterV(b.tree.DrainBackwardOLD())
-}
-
 // Contains checks if array contains item.
 func (b *Array[T]) Contains(item T) bool {
 	cmp := CompareFor[T]()

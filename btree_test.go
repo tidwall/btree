@@ -105,6 +105,17 @@ func (t *tree[K, V]) saneNode(n *node[K, V], depth, height int,
 	for i := n.len + 1; i <= maxItems; i++ {
 		assert(n.branch.children[i] == nil)
 	}
+
+	if t.strprefix {
+		assert(n.branch.prefixes != nil)
+		var k K
+		_, ok := any(k).(string)
+		assert(ok)
+		for i := 0; i < n.len; i++ {
+			assert(prefixString(n.keys[i]) == n.branch.prefixes[i])
+		}
+	}
+
 	return count
 }
 
@@ -116,6 +127,84 @@ func (t *tree[K, V]) Sane(isempty func(K, V) bool) {
 	}
 	assert(count == t.count)
 }
+
+func randString(rng *rand.Rand, n int) string {
+	const c = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_-"
+	s := make([]byte, n)
+	for i := range n {
+		s[i] = c[rng.Int()%len(c)]
+	}
+	return string(s)
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Abstract interface requirements
+//////////////////////////////////////////////////////////////////////////////
+
+type _AbstractCollection[E any, C _AbstractCollection[E, C]] interface {
+	Clear()
+	Clone() C
+	Contains(E) bool
+	Len() int
+	String() string
+}
+
+type _AbstractMap[K, V any, M _AbstractMap[K, V, M]] interface {
+	_AbstractCollection[K, M]
+
+	All() iter.Seq2[K, V]
+	Delete(K) (V, bool)
+	DeleteFunc(func(K, V) bool) bool
+	Get(K) V
+	Keys() iter.Seq[K]
+	Lookup(K) (V, bool)
+	Set(K, V) (V, bool)
+	Values() iter.Seq[V]
+}
+
+type _AbstractSet[E any, S _AbstractSet[E, S]] interface {
+	_AbstractCollection[E, S]
+
+	All() iter.Seq[E]
+	Delete(E) bool
+	DeleteFunc(func(E) bool) bool
+	Difference(S) S
+	DifferenceWith(S)
+	Equal(S) bool
+	Insert(E) bool
+	Intersection(S) S
+	IntersectionWith(S)
+	Intersects(S) bool
+	SymmetricDifference(S) S
+	SymmetricDifferenceWith(S)
+	Union(S) S
+	UnionWith(S)
+}
+
+// Ensure conformance
+var (
+	_ = (_AbstractCollection[int, *Map[int, int]])(&Map[int, int]{})
+	_ = (_AbstractCollection[int, *Set[int]])(&Set[int]{})
+	_ = (_AbstractCollection[int, *Table[int]])(&Table[int]{})
+	_ = (_AbstractCollection[int, *Prique[int]])(&Prique[int]{})
+	_ = (_AbstractCollection[int, *Array[int]])(&Array[int]{})
+	_ = (_AbstractCollection[int, *Queue[int]])(&Queue[int]{})
+	_ = (_AbstractCollection[int, *Deque[int]])(&Deque[int]{})
+	_ = (_AbstractCollection[int, *Stack[int]])(&Stack[int]{})
+	_ = (_AbstractMap[int, int, *Map[int, int]])(&Map[int, int]{})
+	_ = (_AbstractSet[int, *Set[int]])(&Set[int]{})
+)
+
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 
 func TestMapBasic1(t *testing.T) {
 	var m Map[int, int]
@@ -1169,49 +1258,6 @@ func TestMapCOWDataRelease(t *testing.T) {
 	assert(m2.Len() == 0)
 	for _, n := range values {
 		assert(n == 0)
-	}
-}
-
-func TestMapStringKey(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(seed, seed))
-	N := 10000
-	var m Map[string, int]
-	// m.StringPrefix = true
-	var val int
-	var ok bool
-	for i := range N {
-		val, ok = m.Lookup(strconv.Itoa(i))
-		assert(!ok && val == 0)
-		val, ok = m.Insert(strconv.Itoa(i), i)
-		assert(ok && val == 0)
-		val, ok = m.Lookup(strconv.Itoa(i))
-		assert(ok && val == i)
-		val, ok = m.Insert(strconv.Itoa(i), -i)
-		assert(!ok && val == i)
-		val, ok = m.Lookup(strconv.Itoa(i))
-		assert(ok && val == i)
-		m.tree.Sane(nil)
-	}
-
-	start := time.Now()
-	for time.Since(start) < time.Second*3 {
-		var m Map[string, int]
-		// m.StringPrefix = true
-		for i := range N {
-			m.Insert(strconv.Itoa(i), i)
-		}
-		m.tree.Sane(nil)
-		start := rng.Int() % N
-		count := rng.Int() % (N / 3)
-		if start+count > N {
-			count = N - start
-		}
-		s := m.DrainAt(start, count)
-		assert(s.Len() == count)
-		assert(m.Len() == N-count)
-		m.tree.Sane(nil)
 	}
 }
 
@@ -2863,14 +2909,6 @@ func TestCompareStructNoFields(t *testing.T) {
 	assert(compare == nil && search == nil)
 }
 
-func randString(rng *rand.Rand, n int) string {
-	s := make([]byte, n)
-	for i := 0; i < n; i++ {
-		s[i] = byte((rng.Int() % 64) + 'A')
-	}
-	return string(s)
-}
-
 func TestCompareCollateBinaryCS(t *testing.T) {
 	type Row struct {
 		id string `btree:"key,binary_CS"`
@@ -3838,51 +3876,6 @@ func TestNestedCompare(t *testing.T) {
 	}
 }
 
-func TestArrayDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-
-	var b0 Array[int]
-	a0 := rng.Perm(10000)
-	a1 := append([]int{}, a0...)
-	slices.Reverse(a1)
-	b0.Append(a0...)
-	b1 := b0.Clone()
-	assert(slices.Equal(a0, slices.Collect(b0.All())))
-	assert(slices.Equal(a1, slices.Collect(b0.Backward())))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(b0.DrainOLD())))
-	assert(b0.Len() == 0)
-	assert(b1.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(b1.DrainBackwardOLD())))
-	assert(b1.Len() == 0)
-}
-
-func TestMapDrain(t *testing.T) {
-	seed := uint64(time.Now().UnixNano())
-	t.Logf("seed: %d", seed)
-	rng := rand.New(rand.NewPCG(0, seed))
-
-	var b0 Map[int, omit]
-	a0 := rng.Perm(10000)
-	for _, key := range a0 {
-		b0.Insert(key, omit{})
-	}
-	slices.Sort(a0)
-	a1 := append([]int{}, a0...)
-	slices.Reverse(a1)
-	b1 := b0.Clone()
-	assert(slices.Equal(a0, slices.Collect(iterK(b0.All()))))
-	assert(slices.Equal(a1, slices.Collect(iterK(b0.Backward()))))
-	assert(b0.Len() == len(a0))
-	assert(slices.Equal(a0, slices.Collect(iterK(b0.DrainOLD()))))
-	assert(b0.Len() == 0)
-	assert(b1.Len() == len(a0))
-	assert(slices.Equal(a1, slices.Collect(iterK(b1.DrainBackwardOLD()))))
-	assert(b1.Len() == 0)
-}
-
 func testPrique(t *testing.T, initopts int) {
 	type ttt struct {
 		nothing [7]byte
@@ -4651,60 +4644,159 @@ func TestTable2(t *testing.T) {
 	assert(q.String() == fmt.Sprintf("table%v", slices.Collect(q.All())))
 }
 
-//////////////////////////////////////////////////////////////////////////////
-// Abstract interface requirements
-//////////////////////////////////////////////////////////////////////////////
+func TestMapStringKey(t *testing.T) {
+	seed := uint64(time.Now().UnixNano())
+	t.Logf("seed: %d", seed)
+	rng := rand.New(rand.NewPCG(seed, seed))
+	N := 10000
+	var m Map[string, int]
+	// m.StringPrefix = true
+	var val int
+	var ok bool
+	for i := range N {
+		val, ok = m.Lookup(strconv.Itoa(i))
+		assert(!ok && val == 0)
+		val, ok = m.Insert(strconv.Itoa(i), i)
+		assert(ok && val == 0)
+		val, ok = m.Lookup(strconv.Itoa(i))
+		assert(ok && val == i)
+		val, ok = m.Insert(strconv.Itoa(i), -i)
+		assert(!ok && val == i)
+		val, ok = m.Lookup(strconv.Itoa(i))
+		assert(ok && val == i)
+		m.tree.Sane(nil)
+	}
 
-type _AbstractCollection[E any, C _AbstractCollection[E, C]] interface {
-	Clear()
-	Clone() C
-	Contains(E) bool
-	Len() int
-	String() string
+	start := time.Now()
+	for time.Since(start) < time.Second*3 {
+		var m Map[string, int]
+		// m.StringPrefix = true
+		for i := range N {
+			m.Insert(strconv.Itoa(i), i)
+		}
+		m.tree.Sane(nil)
+		start := rng.Int() % N
+		count := rng.Int() % (N / 3)
+		if start+count > N {
+			count = N - start
+		}
+		s := m.DrainAt(start, count)
+		assert(s.Len() == count)
+		assert(m.Len() == N-count)
+		m.tree.Sane(nil)
+	}
 }
 
-type _AbstractMap[K, V any, M _AbstractMap[K, V, M]] interface {
-	_AbstractCollection[K, M]
-
-	All() iter.Seq2[K, V]
-	Delete(K) (V, bool)
-	DeleteFunc(func(K, V) bool) bool
-	Get(K) V
-	Keys() iter.Seq[K]
-	Lookup(K) (V, bool)
-	Set(K, V) (V, bool)
-	Values() iter.Seq[V]
+func pskey(key string, prefix uint64) {
+	key2 := strings.ReplaceAll(key, "\x00", ".")
+	fmt.Printf("%-24s %-24s %-24s %-24s\n",
+		fmt.Sprintf("%s:%d", key2, len(key2)),
+		fmt.Sprintf("%x", key),
+		fmt.Sprintf("%d", prefix),
+		fmt.Sprintf("%x", prefix),
+	)
 }
 
-type _AbstractSet[E any, S _AbstractSet[E, S]] interface {
-	_AbstractCollection[E, S]
+func pskeys(key1 string, pre1 uint64, key2 string, pre2 uint64) {
+	fmt.Printf("%-24s %-24s %-24s %-24s\n",
+		"STRING", "STRHEX", "PREFIX", "PREHEX")
+	pskey(key1, pre1)
+	pskey(key2, pre2)
 
-	All() iter.Seq[E]
-	Delete(E) bool
-	DeleteFunc(func(E) bool) bool
-	Difference(S) S
-	DifferenceWith(S)
-	Equal(S) bool
-	Insert(E) bool
-	Intersection(S) S
-	IntersectionWith(S)
-	Intersects(S) bool
-	SymmetricDifference(S) S
-	SymmetricDifferenceWith(S)
-	Union(S) S
-	UnionWith(S)
 }
 
-// Ensure conformance
-var (
-	_ = (_AbstractCollection[int, *Map[int, int]])(&Map[int, int]{})
-	_ = (_AbstractCollection[int, *Set[int]])(&Set[int]{})
-	_ = (_AbstractCollection[int, *Table[int]])(&Table[int]{})
-	_ = (_AbstractCollection[int, *Prique[int]])(&Prique[int]{})
-	_ = (_AbstractCollection[int, *Array[int]])(&Array[int]{})
-	_ = (_AbstractCollection[int, *Queue[int]])(&Queue[int]{})
-	_ = (_AbstractCollection[int, *Deque[int]])(&Deque[int]{})
-	_ = (_AbstractCollection[int, *Stack[int]])(&Stack[int]{})
-	_ = (_AbstractMap[int, int, *Map[int, int]])(&Map[int, int]{})
-	_ = (_AbstractSet[int, *Set[int]])(&Set[int]{})
-)
+func TestPrefixes(t *testing.T) {
+	_ = pskeys
+	assert(prefixString("") == 0)
+	assert(prefixString("h") == 7493989779944505344)
+	assert(prefixString("hf") == 7522700227568992256)
+	assert(prefixString("hfp") == 7522823372871303168)
+	assert(prefixString("hfpq") == 7522823858202607616)
+	assert(prefixString("hfpqm") == 7522823860031324160)
+	assert(prefixString("hfpqmr") == 7522823860038795264)
+	assert(prefixString("hfpqmri") == 7522823860038822144)
+	assert(prefixString("hfpqmrix") == 7522823860038822264)
+	assert(prefixString("hfpqmrixj") == 7522823860038822264)
+	assert(prefixString("hfpqmrixjh") == 7522823860038822264)
+	assert(prefixString("hfpqmrixjhs") == 7522823860038822264)
+	assert(prefixString("\x00\x00\x00\x00\x00\x00\x00h") == 'h')
+	assert(prefixString("\x00\x00\x00\x00\x00\x00\x00hh") == 'h')
+	assert(prefixString("\x00\x00\x00\x00\x00\x00\x00\x00h") == 0)
+	seed := uint64(time.Now().UnixNano())
+	// seed = 1793556169474674000
+	t.Logf("seed: %d", seed)
+	rng := rand.New(rand.NewPCG(seed, seed))
+	start := time.Now()
+	for time.Since(start) < time.Second*2 {
+		for range 100000 {
+			var key1, key2 string
+			switch rng.Int() % 32 {
+			case 0:
+				key1 = randString(rng, rng.IntN(10))
+				key2 = key1
+			case 1:
+				key1 = randString(rng, rng.IntN(10))
+				key2 = key1 + randString(rng, rng.IntN(10))
+			case 3:
+				key2 = randString(rng, rng.IntN(10))
+				key1 = key2 + randString(rng, rng.IntN(10))
+			case 4:
+				key1 = randString(rng, rng.IntN(10))
+				key2 = key1 + strings.Repeat("\x00", rng.IntN(10))
+			case 5:
+				key1 = key2 + strings.Repeat("\x00", rng.IntN(10))
+				key2 = randString(rng, rng.IntN(10))
+			default:
+				key1 = randString(rng, rng.IntN(10))
+				key2 = randString(rng, rng.IntN(10))
+			}
+			pre1 := prefixString(key1)
+			pre2 := prefixString(key2)
+			if pre1 < pre2 {
+				assert(key1 < key2)
+			} else if pre1 > pre2 {
+				assert(key1 > key2)
+			} else {
+				assert(pre1 == pre2)
+				if len(key1) < len(key2) {
+					assert(key1 == key2[:len(key1)])
+				} else if len(key2) < len(key1) {
+					assert(key2 == key1[:len(key2)])
+				} else if len(key2) > 8 {
+					assert(key1[:8] == key2[:8])
+				} else {
+					assert(key1 == key2)
+				}
+			}
+			if key1 == key2 {
+				assert(pre1 == pre2)
+			}
+		}
+	}
+}
+
+func TestMapStringKey2(t *testing.T) {
+	seed := uint64(time.Now().UnixNano())
+	t.Logf("seed: %d", seed)
+	rng := rand.New(rand.NewPCG(seed, seed))
+	N := 10000
+	S := 100
+	var isempty = func(key, value string) bool {
+		return key == "" && value == ""
+	}
+	var m Map[string, string]
+	var keys []string
+	kmap := make(map[string]bool)
+	for len(kmap) < N {
+		key := randString(rng, rng.IntN(S))
+		if !kmap[key] {
+			kmap[key] = true
+			keys = append(keys, key)
+		}
+	}
+	for i := range N {
+		_, ok := m.Insert(keys[i], keys[i])
+		assert(ok)
+		m.tree.Sane(isempty)
+	}
+}

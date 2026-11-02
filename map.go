@@ -92,17 +92,25 @@ func (b *Map[K, V]) init0() {
 		b.tree.dataCompare = mapCompare
 		var key K
 		if _, ok := any(key).(string); ok {
-			// Use standard operations with binary search.
-			b.tree.dataSearch = mapBinarySearch
-			b.tree.strprefix = true
+			if b.tree.nopre {
+				// String key with user requesting no prefix.
+				// Use standard operations with binary search.
+				b.tree.stdops = true
+				b.tree.dataSearch = mapBinarySearch
+			} else {
+				// Use string prefix.
+				b.tree.strprefix = true
+			}
 		}
 	}
 	if b.tree.dataSearch == nil {
 		b.tree.dataSearch = mapSearch
 	}
+	b.tree.alt = b.tree.alt || b.tree.stdops || b.tree.strprefix
 	b.tree.initd = true
 }
 
+// should inline
 func (b *Map[K, V]) init() {
 	// Called from Insert, InsertAt, Set, PushFront, PushBack
 	if !b.tree.initd {
@@ -110,351 +118,47 @@ func (b *Map[K, V]) init() {
 	}
 }
 
-func (b *Map[K, V]) nodeInsert(n *node[K, V], key K, value V) (V, int) {
-	var emptyValue V
-	// only branch nodes are reachable here
-	var child *node[K, V]
-	var i int
-	var j int
-	if key > n.keyAt(n.len-1) {
-		i = n.len
-	} else {
-		for key > n.keyAt(i) {
-			i++
-		}
-		if key == n.keyAt(i) {
-			goto foundInBranch
-		}
-	}
-	if b.tree.cloned {
-		b.tree.cowChild(n, i, true)
-	}
-	if b.tree.ensureBranch(n, i) {
-		return b.nodeInsert(n, key, value)
-	}
-	child = n.branch.children[i]
-	if !child.leaf() {
-		prev, inserted := b.nodeInsert(child, key, value)
-		n.branch.counts[i] += inserted
-		return prev, inserted
-	}
-	// skip the last recursive call
-	if key > child.keyAt(child.len-1) {
-		j = child.len
-	} else {
-		for key > child.keyAt(j) {
-			j++
-		}
-		if key == child.keyAt(j) {
-			goto foundInLeaf
-		}
-	}
-	child.insertItemAt(key, value, j)
-	n.branch.counts[i]++
-	return emptyValue, 1
-foundInBranch:
-	return n.values[i], 0
-foundInLeaf:
-	return child.values[j], 0
-}
-
-func mapInsert[K cmp.Ordered, V any](b *Map[K, V], key K, value V) (V, bool) {
-	b.init()
-	var emptyValue V
-	if b.tree.count == 0 {
-		b.tree.insertFirstItem(key, value)
-		return emptyValue, true
-	}
-	if b.tree.cloned {
-		b.tree.cowRoot(true)
-	}
-	b.tree.ensureRoot()
-	if !b.tree.root.leaf() {
-		current, inserted := b.nodeInsert(b.tree.root, key, value)
-		b.tree.count += inserted
-		return current, inserted == 1
-	}
-	i := 0
-	if key > b.tree.root.keyAt(b.tree.root.len-1) {
-		i = b.tree.root.len
-	} else {
-		for key > b.tree.root.keyAt(i) {
-			i++
-		}
-		if key == b.tree.root.keyAt(i) {
-			return b.tree.root.values[i], false
-		}
-	}
-	b.tree.root.insertItemAt(key, value, i)
-	b.tree.count++
-	return emptyValue, true
-}
-
-func mapReplace[K cmp.Ordered, V any](b *Map[K, V], key K, value V) (V, bool) {
-	var emptyValue V
-	if b.tree.count == 0 {
-		return emptyValue, false
-	}
-	b.tree.cowRoot(true)
-	n := b.tree.root
-	for {
-		i := 0
-		if key > n.keyAt(n.len-1) {
-			i = n.len
-		} else {
-			for key > n.keyAt(i) {
-				i++
-			}
-			if key == n.keyAt(i) {
-				old := n.values[i]
-				n.values[i] = value
-				return old, true
-			}
-		}
-		if n.leaf() {
-			return emptyValue, false
-		}
-		b.tree.cowChild(n, i, true)
-		n = n.branch.children[i]
-	}
-}
-
-func (b *Map[K, V]) nodeSet(n *node[K, V], key K, value V) (V, int) {
-	var old V
-	// only branch nodes are reachable here
-	var child *node[K, V]
-	var i int
-	var j int
-	if key > n.keyAt(n.len-1) {
-		i = n.len
-	} else {
-		for key > n.keyAt(i) {
-			i++
-		}
-		if key == n.keyAt(i) {
-			goto foundInBranch
-		}
-	}
-	if b.tree.cloned {
-		b.tree.cowChild(n, i, true)
-	}
-	if b.tree.ensureBranch(n, i) {
-		return b.nodeSet(n, key, value)
-	}
-	child = n.branch.children[i]
-	if !child.leaf() {
-		prev, inserted := b.nodeSet(child, key, value)
-		n.branch.counts[i] += inserted
-		return prev, inserted
-	}
-	// skip the last recursive call
-	if key > child.keyAt(child.len-1) {
-		j = child.len
-	} else {
-		for key > child.keyAt(j) {
-			j++
-		}
-		if key == child.keyAt(j) {
-			goto foundInLeaf
-		}
-	}
-	child.insertItemAt(key, value, j)
-	n.branch.counts[i]++
-	return old, 1
-foundInLeaf:
-	old = child.values[j]
-	child.values[j] = value
-	return old, 0
-foundInBranch:
-	old = n.values[i]
-	n.values[i] = value
-	return old, 0
-}
-
-func mapSet[K cmp.Ordered, V any](b *Map[K, V], key K, value V) (V, bool) {
-	b.init()
-	var emptyValue V
-	if b.tree.count == 0 {
-		b.tree.insertFirstItem(key, value)
-		return emptyValue, false
-	}
-	if b.tree.cloned {
-		b.tree.cowRoot(true)
-	}
-	b.tree.ensureRoot()
-	if !b.tree.root.leaf() {
-		current, inserted := b.nodeSet(b.tree.root, key, value)
-		b.tree.count += inserted
-		return current, inserted == 0
-	}
-	i := 0
-	if key > b.tree.root.keyAt(b.tree.root.len-1) {
-		i = b.tree.root.len
-	} else {
-		for key > b.tree.root.keyAt(i) {
-			i++
-		}
-		if key == b.tree.root.keyAt(i) {
-			prev := b.tree.root.values[i]
-			b.tree.root.values[i] = value
-			return prev, true
-		}
-	}
-	b.tree.root.insertItemAt(key, value, i)
-	b.tree.count++
-	return emptyValue, false
-}
-
-func mapLookup[K cmp.Ordered, V any](b *Map[K, V], key K) (V, bool) {
-	var emptyValue V
-	if b.tree.count == 0 {
-		return emptyValue, false
-	}
-	n := b.tree.root
-	for {
-		i := 0
-		if key > n.keyAt(n.len-1) {
-			i = n.len
-		} else {
-			for key > n.keyAt(i) {
-				i++
-			}
-			if key == n.keyAt(i) {
-				return n.values[i], true
-			}
-		}
-		if n.leaf() {
-			return emptyValue, false
-		}
-		n = n.branch.children[i]
-	}
-}
-
-func mapLookupMut[K cmp.Ordered, V any](b *Map[K, V], key K) (V, bool) {
-	var emptyValue V
-	if b.tree.count == 0 {
-		return emptyValue, false
-	}
-	b.tree.cowRoot(true)
-	n := b.tree.root
-	for {
-		i := 0
-		if key > n.keyAt(n.len-1) {
-			i = n.len
-		} else {
-			for key > n.keyAt(i) {
-				i++
-			}
-			if key == n.keyAt(i) {
-				return n.values[i], true
-			}
-		}
-		if n.leaf() {
-			return emptyValue, false
-		}
-		b.tree.cowChild(n, i, true)
-		n = n.branch.children[i]
-	}
-}
-
-func (b *Map[K, V]) nodeDelete(n *node[K, V], key K) (V, bool) {
-	var emptyKey K
-	var emptyValue V
-	i, found := 0, false
-	if key > n.keyAt(n.len-1) {
-		i = n.len
-	} else {
-		for key > n.keyAt(i) {
-			i++
-		}
-		found = key == n.keyAt(i)
-	}
-	if n.leaf() {
-		if found {
-			old := n.values[i]
-			copy(n.keys[i:n.len-1], n.keys[i+1:n.len])
-			n.keys[n.len-1] = emptyKey
-			copy(n.values[i:n.len-1], n.values[i+1:n.len])
-			n.values[n.len-1] = emptyValue
-			n.len--
-			return old, true
-		}
-		return emptyValue, false
-	}
-	var old V
-	var deleted bool
-	b.tree.cowChild(n, i, true)
-	if found {
-		old = n.values[i]
-		maxKey, maxValue := b.tree.nodeDeleteMax(n.branch.children[i])
-		deleted = true
-		n.keys[i] = maxKey
-		n.values[i] = maxValue
-	} else {
-		old, deleted = b.nodeDelete(n.branch.children[i], key)
-	}
-	if !deleted {
-		return old, false
-	}
-	n.branch.counts[i]--
-	if n.branch.children[i].len < minItems {
-		b.tree.rebalance(n, i)
-	}
-	return old, true
-}
-
-func mapDelete[K cmp.Ordered, V any](b *Map[K, V], key K) (V, bool) {
-	var emptyValue V
-	if b.tree.count == 0 {
-		return emptyValue, false
-	}
-	b.tree.cowRoot(true)
-	old, deleted := b.nodeDelete(b.tree.root, key)
-	if deleted {
-		b.tree.count--
-		if b.tree.count == 0 {
-			b.tree.root = nil
-		} else if b.tree.root.len == 0 && !b.tree.root.leaf() {
-			b.tree.root = b.tree.root.branch.children[0]
-		}
-	}
-	return old, deleted
-}
-
 // Insert new item.
 // Returns true if inserted or false if already exists.
 func (b *Map[K, V]) Insert(key K, value V) (V, bool) {
-	if b.tree.strprefix {
-		return b.tree.Insert(key, value)
+	b.init()
+	if b.tree.alt {
+		return b.insertAlt(key, value)
+	} else {
+		return b.insertNS(key, value)
 	}
-	return mapInsert(b, key, value)
 }
 
 // Replace existing item
 // Returns true if replaced, of false if not exists.
 func (b *Map[K, V]) Replace(key K, value V) (V, bool) {
-	if b.tree.strprefix {
-		return b.tree.Replace(key, value)
+	b.init()
+	if b.tree.alt {
+		return b.replaceAlt(key, value)
+	} else {
+		return b.replaceNS(key, value)
 	}
-	return mapReplace(b, key, value)
 }
 
 // Set inserts or replaces item.
 // Returns true if replaced or false if inserted
 func (b *Map[K, V]) Set(key K, value V) (V, bool) {
-	if b.tree.strprefix {
-		return b.tree.Set(key, value)
+	b.init()
+	if b.tree.alt {
+		return b.setAlt(key, value)
+	} else {
+		return b.setNS(key, value)
 	}
-	return mapSet(b, key, value)
+
 }
 
-// Delete item
+// Delete item from map.
 func (b *Map[K, V]) Delete(key K) (V, bool) {
-	if b.tree.strprefix {
-		var emptyValue V
-		return b.tree.Delete(key, emptyValue)
+	if b.tree.alt {
+		return b.deleteAlt(key)
+	} else {
+		return b.deleteNS(key)
 	}
-	return mapDelete(b, key)
 }
 
 // Contains returns true if item exists
@@ -485,22 +189,22 @@ func (b *Map[K, V]) Contains(key K) bool {
 // Lookup an item
 // Returns true if found or false if not found
 func (b *Map[K, V]) Lookup(key K) (V, bool) {
-	if b.tree.strprefix {
-		var emptyValue V
-		return b.tree.Lookup(key, emptyValue)
+	if b.tree.alt {
+		return b.lookupAlt(key)
+	} else {
+		return b.lookupNS(key)
 	}
-	return mapLookup(b, key)
 }
 
 // Lookup an item
 // Returns true if found or false if not found
 // MUTABLE OPERATION
 func (b *Map[K, V]) LookupMut(key K) (V, bool) {
-	if b.tree.strprefix {
-		var emptyValue V
-		return b.tree.LookupMut(key, emptyValue)
+	if b.tree.alt {
+		return b.lookupAltMut(key)
+	} else {
+		return b.lookupNSMut(key)
 	}
-	return mapLookupMut(b, key)
 }
 
 // Get an item
@@ -787,6 +491,7 @@ func (b *Map[K, V]) DeleteAt(index int) (K, V, bool) {
 
 // ReplaceAt replaces item at index
 func (b *Map[K, V]) ReplaceAt(index int, key K, value V) (K, V, bool) {
+	b.init()
 	return b.tree.ReplaceAt(index, key, value)
 }
 
@@ -865,17 +570,6 @@ func (b *Map[K, V]) SeekPrev(key K) (K, V, bool) {
 func (b *Map[K, V]) SeekPrevMut(key K) (K, V, bool) {
 	var emptyValue V
 	return b.tree.SeekPrevMut(key, emptyValue)
-}
-
-// DrainOLD deletes all items from map and returns them as an iterator
-func (b *Map[K, V]) DrainOLD() iter.Seq2[K, V] {
-	return b.tree.DrainOLD()
-}
-
-// DrainBackwardOLD deletes all items from map and returns them as an iterator, in
-// reverse order
-func (b *Map[K, V]) DrainBackwardOLD() iter.Seq2[K, V] {
-	return b.tree.DrainBackwardOLD()
 }
 
 // String returns a string representation of map

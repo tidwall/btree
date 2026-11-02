@@ -20,6 +20,9 @@ const minItems = maxItems / 2
 type tree[K, V any] struct {
 	cloned      bool        // Clone() called at least once during life of tree.
 	strprefix   bool        // Use string prefixes, K _MUST_ be a string.
+	nopre       bool        // flag used by outer types
+	stdops      bool        // flag used by outer types
+	alt         bool        // flag used by outer types
 	initd       bool        // flag used by outer types
 	count       int         // total tree count
 	root        *node[K, V] // root node
@@ -115,6 +118,9 @@ func (t *tree[K, V]) splitNode(n *node[K, V]) (*node[K, V], K, V) {
 			n.branch.children[i] = nil
 		}
 		copy(right.branch.counts[:], n.branch.counts[m+1:])
+		if n.branch.prefixes != nil {
+			copy(right.branch.prefixes[:], n.branch.prefixes[m+1:])
+		}
 	}
 	return right, mkey, mvalue
 }
@@ -160,6 +166,10 @@ func (t *tree[K, V]) ensureRoot() (wasSplit bool) {
 
 func (t *tree[K, V]) insertBranchItemAt(n *node[K, V], key K, value V, i int,
 ) {
+	if n.branch.prefixes != nil {
+		copy(n.branch.prefixes[i+1:], n.branch.prefixes[i:n.len])
+		n.branch.prefixes[i] = prefixString(key)
+	}
 	n.insertItemAt(key, value, i)
 }
 
@@ -222,6 +232,9 @@ func (t *tree[K, V]) copyNode(n *node[K, V]) *node[K, V] {
 			n2.branch.children[i] = n.branch.children[i]
 		}
 		copy(n2.branch.counts[:], n.branch.counts[:n.len+1])
+		if n.branch.prefixes != nil {
+			copy(n2.branch.prefixes[:], n.branch.prefixes[:n.len])
+		}
 	}
 	return n2
 }
@@ -302,6 +315,11 @@ func (t *tree[K, V]) rebalance(n *node[K, V], i int) {
 		copy(left.keys[left.len+1:], right.keys[:right.len])
 		left.values[left.len] = n.values[i]
 		copy(left.values[left.len+1:], right.values[:right.len])
+		if left.branch != nil && left.branch.prefixes != nil {
+			copy(left.branch.prefixes[left.len+1:],
+				right.branch.prefixes[:right.len])
+			left.branch.prefixes[left.len] = n.branch.prefixes[i]
+		}
 		if !left.leaf() {
 			copy(left.branch.children[left.len+1:],
 				right.branch.children[:right.len+1])
@@ -315,6 +333,10 @@ func (t *tree[K, V]) rebalance(n *node[K, V], i int) {
 		n.keys[n.len-1] = emptyKey
 		copy(n.values[i:], n.values[i+1:n.len])
 		n.values[n.len-1] = emptyValue
+		if n.branch.prefixes != nil {
+			copy(n.branch.prefixes[i:], n.branch.prefixes[i+1:n.len])
+			n.branch.prefixes[n.len-1] = 0
+		}
 
 		// move the children over one slot
 		copy(n.branch.children[i+1:], n.branch.children[i+2:n.len+1])
@@ -337,6 +359,14 @@ func (t *tree[K, V]) rebalance(n *node[K, V], i int) {
 		right.values[0] = n.values[i]
 		n.values[i] = left.values[left.len-1]
 		left.values[left.len-1] = emptyValue
+		if left.branch != nil && left.branch.prefixes != nil {
+			copy(right.branch.prefixes[1:], right.branch.prefixes[:right.len])
+			right.branch.prefixes[0] = n.branch.prefixes[i]
+			n.branch.prefixes[i] = left.branch.prefixes[left.len-1]
+			left.branch.prefixes[left.len-1] = 0
+		} else if n.branch.prefixes != nil {
+			n.branch.prefixes[i] = prefixString(n.keys[i])
+		}
 		if !left.leaf() {
 			// move the left-node last child into the right-node first slot
 			copy(right.branch.children[1:], right.branch.children[:right.len+1])
@@ -360,6 +390,14 @@ func (t *tree[K, V]) rebalance(n *node[K, V], i int) {
 		n.values[i] = right.values[0]
 		copy(right.values[:], right.values[1:right.len])
 		right.values[right.len-1] = emptyValue
+		if left.branch != nil && left.branch.prefixes != nil {
+			left.branch.prefixes[left.len] = n.branch.prefixes[i]
+			n.branch.prefixes[i] = right.branch.prefixes[0]
+			copy(right.branch.prefixes[:], right.branch.prefixes[1:right.len])
+			right.branch.prefixes[right.len-1] = 0
+		} else if n.branch.prefixes != nil {
+			n.branch.prefixes[i] = prefixString(n.keys[i])
+		}
 		if !left.leaf() {
 			left.branch.children[left.len+1] = right.branch.children[0]
 			copy(right.branch.children[:], right.branch.children[1:right.len+1])
@@ -461,28 +499,6 @@ func (t *tree[K, V]) Backward() iter.Seq2[K, V] {
 func (t *tree[K, V]) BackwardMut() iter.Seq2[K, V] {
 	return func(yield func(K, V) bool) {
 		t.backward0(yield, true)
-	}
-}
-
-func (t *tree[K, V]) DrainOLD() iter.Seq2[K, V] {
-	return func(yield func(K, V) bool) {
-		for {
-			k, v, ok := t.PopFront()
-			if !ok || !yield(k, v) {
-				break
-			}
-		}
-	}
-}
-
-func (t *tree[K, V]) DrainBackwardOLD() iter.Seq2[K, V] {
-	return func(yield func(K, V) bool) {
-		for {
-			k, v, ok := t.PopBack()
-			if !ok || !yield(k, v) {
-				break
-			}
-		}
 	}
 }
 
@@ -1961,4 +1977,13 @@ func iterV[K, V any](iyield iter.Seq2[K, V]) iter.Seq[V] {
 			}
 		}
 	}
+}
+
+func prefixString[K any](key K) uint64 {
+	s := *(*string)(unsafe.Pointer(&key))
+	var b [8]byte
+	copy(b[:], s[:])
+	return uint64(b[7])<<0 | uint64(b[6])<<8 | uint64(b[5])<<16 |
+		uint64(b[4])<<24 | uint64(b[3])<<32 | uint64(b[2])<<40 |
+		uint64(b[1])<<48 | uint64(b[0])<<56
 }
