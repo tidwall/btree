@@ -1,179 +1,382 @@
+// https://github.com/tidwall/btree
+//
+// Copyright 2026 Joshua J Baker. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package btree
 
-type Set[K ordered] struct {
-	base Map[K, struct{}]
+import (
+	"cmp"
+	"fmt"
+	"iter"
+	"slices"
+)
+
+////////////////////////////////////////////////////////////////////////////////
+// Set
+////////////////////////////////////////////////////////////////////////////////
+
+// Set is a b-tree set of keys
+type Set[K cmp.Ordered] struct {
+	base Map[K, omit]
 }
 
-// Copy
-func (tr *Set[K]) Copy() *Set[K] {
-	tr2 := new(Set[K])
-	tr2.base = *tr.base.Copy()
-	return tr2
+// NewSet returns a new set
+func NewSet[K cmp.Ordered]() *Set[K] {
+	return new(Set[K])
 }
 
-func (tr *Set[K]) IsoCopy() *Set[K] {
-	tr2 := new(Set[K])
-	tr2.base = *tr.base.IsoCopy()
-	return tr2
+// Insert a key
+func (b *Set[K]) Insert(key K) bool {
+	_, inserted := b.base.Insert(key, omit{})
+	return inserted
 }
 
-// Insert an item
-func (tr *Set[K]) Insert(key K) {
-	tr.base.Set(key, struct{}{})
+// Delete a key
+func (b *Set[K]) Delete(key K) bool {
+	_, deleted := b.base.Delete(key)
+	return deleted
 }
 
-func (tr *Set[K]) Scan(iter func(key K) bool) {
-	tr.base.Scan(func(key K, value struct{}) bool {
-		return iter(key)
-	})
+// Contains returns true if key exists
+func (b *Set[K]) Contains(key K) bool {
+	return b.base.Contains(key)
 }
 
-// Get a value for key
-func (tr *Set[K]) Contains(key K) bool {
-	_, ok := tr.base.Get(key)
-	return ok
+// InsertAt inserts key at index.
+// Returns false if out of order or out of bounds
+func (b *Set[K]) InsertAt(index int, key K) bool {
+	return b.base.InsertAt(index, key, omit{})
 }
 
-// Len returns the number of items in the tree
-func (tr *Set[K]) Len() int {
-	return tr.base.Len()
-}
-
-// Delete an item
-func (tr *Set[K]) Delete(key K) {
-	tr.base.Delete(key)
-}
-
-// Ascend the tree within the range [pivot, last]
-// Pass nil for pivot to scan all item in ascending order
-// Return false to stop iterating
-func (tr *Set[K]) Ascend(pivot K, iter func(key K) bool) {
-	tr.base.Ascend(pivot, func(key K, value struct{}) bool {
-		return iter(key)
-	})
-}
-
-func (tr *Set[K]) Reverse(iter func(key K) bool) {
-	tr.base.Reverse(func(key K, value struct{}) bool {
-		return iter(key)
-	})
-}
-
-// Descend the tree within the range [pivot, first]
-// Pass nil for pivot to scan all item in descending order
-// Return false to stop iterating
-func (tr *Set[K]) Descend(pivot K, iter func(key K) bool) {
-	tr.base.Descend(pivot, func(key K, value struct{}) bool {
-		return iter(key)
-	})
-}
-
-// Load is for bulk loading pre-sorted items
-func (tr *Set[K]) Load(key K) {
-	tr.base.Load(key, struct{}{})
-}
-
-// Min returns the minimum item in tree.
-// Returns nil if the treex has no items.
-func (tr *Set[K]) Min() (K, bool) {
-	key, _, ok := tr.base.Min()
+// DeleteAt deletes key at index
+func (b *Set[K]) DeleteAt(index int) (K, bool) {
+	key, _, ok := b.base.DeleteAt(index)
 	return key, ok
 }
 
-// Max returns the maximum item in tree.
-// Returns nil if the tree has no items.
-func (tr *Set[K]) Max() (K, bool) {
-	key, _, ok := tr.base.Max()
+// ReplaceAt replaces key at index.
+func (b *Set[K]) ReplaceAt(index int, key K) (K, bool) {
+	key, _, ok := b.base.ReplaceAt(index, key, omit{})
 	return key, ok
 }
 
-// PopMin removes the minimum item in tree and returns it.
-// Returns nil if the tree has no items.
-func (tr *Set[K]) PopMin() (K, bool) {
-	key, _, ok := tr.base.PopMin()
+// LookupAt returns key at index.
+func (b *Set[K]) LookupAt(index int) (K, bool) {
+	key, _, ok := b.base.LookupAt(index)
 	return key, ok
 }
 
-// PopMax removes the maximum item in tree and returns it.
-// Returns nil if the tree has no items.
-func (tr *Set[K]) PopMax() (K, bool) {
-	key, _, ok := tr.base.PopMax()
+// GetAt returns key at index
+func (b *Set[K]) GetAt(index int) K {
+	key, _ := b.base.GetAt(index)
+	return key
+}
+
+// IndexOf returns the index of key.
+func (b *Set[K]) IndexOf(key K) (int, bool) {
+	return b.base.IndexOf(key)
+}
+
+// Ascend returns an iterator starting at index.
+func (b *Set[K]) Ascend(key K) iter.Seq[K] {
+	return iterK(b.base.Ascend(key))
+}
+
+// Descend returns an iterator starting at index in reverse order.
+func (b *Set[K]) Descend(key K) iter.Seq[K] {
+	return iterK(b.base.Descend(key))
+}
+
+// All returns an iterator of all keys.
+func (b *Set[K]) All() iter.Seq[K] {
+	return iterK(b.base.All())
+}
+
+// Backward returns an iterator of all keys in reverse order.
+func (b *Set[K]) Backward() iter.Seq[K] {
+	return iterK(b.base.Backward())
+}
+
+// AscendAt returns iterator starting at index.
+func (b *Set[K]) AscendAt(index int) iter.Seq[K] {
+	return iterK(b.base.AscendAt(index))
+}
+
+// AscendAt returns iterator starting index in reverse order
+func (b *Set[K]) DescendAt(index int) iter.Seq[K] {
+	return iterK(b.base.DescendAt(index))
+}
+
+// Seek returns the first key that is >= provided key.
+func (b *Set[K]) Seek(key K) (K, bool) {
+	key, _, ok := b.base.Seek(key)
 	return key, ok
 }
 
-// GetAt returns the value at index.
-// Return nil if the tree is empty or the index is out of bounds.
-func (tr *Set[K]) GetAt(index int) (K, bool) {
-	key, _, ok := tr.base.GetAt(index)
+// SeekNext returns first key that is > provided key.
+func (b *Set[K]) SeekNext(key K) (K, bool) {
+	key, _, ok := b.base.SeekNext(key)
 	return key, ok
 }
 
-// DeleteAt deletes the item at index.
-// Return nil if the tree is empty or the index is out of bounds.
-func (tr *Set[K]) DeleteAt(index int) (K, bool) {
-	key, _, ok := tr.base.DeleteAt(index)
+// SeekPrev returns first key that is < provided key.
+func (b *Set[K]) SeekPrev(key K) (K, bool) {
+	key, _, ok := b.base.SeekPrev(key)
 	return key, ok
 }
 
-// Height returns the height of the tree.
-// Returns zero if tree has no items.
-func (tr *Set[K]) Height() int {
-	return tr.base.Height()
+// PushFront pushes key to front of set
+func (b *Set[K]) PushFront(key K) bool {
+	return b.base.PushFront(key, omit{})
 }
 
-// SetIter represents an iterator for btree.Set
-type SetIter[K ordered] struct {
-	base MapIter[K, struct{}]
+// PushBack pushes key to back of set
+func (b *Set[K]) PushBack(key K) bool {
+	return b.base.PushBack(key, omit{})
 }
 
-// Iter returns a read-only iterator.
-func (tr *Set[K]) Iter() SetIter[K] {
-	return SetIter[K]{tr.base.Iter()}
+// PopFront removes first key
+func (b *Set[K]) PopFront() (K, bool) {
+	key, _, ok := b.base.PopFront()
+	return key, ok
 }
 
-// Seek to item greater-or-equal-to key.
-// Returns false if there was no item found.
-func (iter *SetIter[K]) Seek(key K) bool {
-	return iter.base.Seek(key)
+// PopBack removes last key
+func (b *Set[K]) PopBack() (K, bool) {
+	key, _, ok := b.base.PopBack()
+	return key, ok
 }
 
-// First moves iterator to first item in tree.
-// Returns false if the tree is empty.
-func (iter *SetIter[K]) First() bool {
-	return iter.base.First()
+// Front returns first key
+func (b *Set[K]) Front() (K, bool) {
+	key, _, ok := b.base.Front()
+	return key, ok
 }
 
-// Last moves iterator to last item in tree.
-// Returns false if the tree is empty.
-func (iter *SetIter[K]) Last() bool {
-	return iter.base.Last()
+// Back returns last key
+func (b *Set[K]) Back() (K, bool) {
+	key, _, ok := b.base.Back()
+	return key, ok
 }
 
-// Next moves iterator to the next item in iterator.
-// Returns false if the tree is empty or the iterator is at the end of
-// the tree.
-func (iter *SetIter[K]) Next() bool {
-	return iter.base.Next()
+// Len returns the number of keys in set
+func (b *Set[K]) Len() int {
+	return b.base.Len()
 }
 
-// Prev moves iterator to the previous item in iterator.
-// Returns false if the tree is empty or the iterator is at the beginning of
-// the tree.
-func (iter *SetIter[K]) Prev() bool {
-	return iter.base.Prev()
+// Clear the set
+func (b *Set[K]) Clear() {
+	b.base.Clear()
 }
 
-// Key returns the current iterator item key.
-func (iter *SetIter[K]) Key() K {
-	return iter.base.Key()
+// Clone the set
+// This is a fast O(1) operation using a copy-on-write method.
+func (b *Set[K]) Clone() *Set[K] {
+	b2 := new(Set[K])
+	*b2 = *b
+	b.base.cloneInto(&b2.base)
+	return b2
 }
 
-// Keys returns all the keys in order.
-func (tr *Set[K]) Keys() []K {
-	return tr.base.Keys()
+// Release clears the set and release any references.
+// This method is functionally equivalent to Clear() but is an optimization for
+// collections that are cloned.
+func (b *Set[K]) Release() {
+	b.base.Release()
 }
 
-// Clear will delete all items.
-func (tr *Set[K]) Clear() {
-	tr.base.Clear()
+// DrainAtOptions will delete all items within the provided index and
+// count sub-range.
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) DrainAtOptions(index, count int, opts DrainOptions,
+) Extract[K] {
+	return sliceK(b.base.DrainAtOptions(index, count, opts))
+}
+
+// DrainOptions will delete all items within the provided min (inclusive)
+// and max (exclusive) sub-range.
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) DrainOptions(min, max K, opts DrainOptions,
+) Extract[K] {
+	return sliceK(b.base.DrainOptions(min, max, opts))
+}
+
+// DeleteRangeOptions will delete all items within the provided min (inclusive)
+// and max (exclusive) sub-range.
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) DrainAt(index, count int) Extract[K] {
+	return b.DrainAtOptions(index, count, DrainOptions{})
+}
+
+// Drain will delete all items within the provided min (inclusive) and
+// max (exclusive) sub-range.
+// Returns the deleted items as an ordered extract that can be iterated over.
+func (b *Set[K]) Drain(min, max K) Extract[K] {
+	return b.DrainOptions(min, max, DrainOptions{})
+}
+
+// String representation
+func (b *Set[K]) String() string {
+	return fmt.Sprintf("set%v", slices.Collect(b.All()))
+}
+
+// Equal returs true if boths sets contains the same items
+func (b *Set[K]) Equal(other *Set[K]) bool {
+	if b == other {
+		return true
+	}
+	const group = 128 // gather no more than this many items at a time
+	var g1 []K
+	var g2 []K
+	var start int
+	for {
+		g1 = g1[:0]
+		for k := range b.AscendAt(start) {
+			if len(g1) == group {
+				break
+			}
+			g1 = append(g1, k)
+		}
+		g2 = g2[:0]
+		for k := range other.AscendAt(start) {
+			if len(g2) == group {
+				break
+			}
+			g2 = append(g2, k)
+		}
+		if !slices.Equal(g1, g2) {
+			return false
+		}
+		if len(g1) < group {
+			return true
+		}
+		start += group
+	}
+}
+
+// DeleteFunc delete item if its allowed by del function.
+func (b *Set[K]) DeleteFunc(del func(K) bool) bool {
+	return b.base.DeleteFunc(func(k K, v omit) bool { return del(k) })
+}
+
+// UnionWith inserts all keys of other set.
+func (b *Set[K]) UnionWith(other *Set[K]) {
+	if b != other {
+		for k := range other.All() {
+			b.Insert(k)
+		}
+	}
+}
+
+// Union returns a new set containing all keys of both sets.
+func (b *Set[K]) Union(other *Set[K]) *Set[K] {
+	b2 := b.Clone()
+	if b != other {
+		b2.UnionWith(other)
+	}
+	return b2
+}
+
+// Difference returns a new set containing keys that are in target set but not
+// in other.
+func (b *Set[K]) Difference(other *Set[K]) *Set[K] {
+	b2 := NewSet[K]()
+	if b != other {
+		for k := range b.All() {
+			if !other.Contains(k) {
+				b2.Insert(k)
+			}
+		}
+	}
+	return b2
+}
+
+// DifferenceWith removes any items from set that are in other.
+func (b *Set[K]) DifferenceWith(other *Set[K]) {
+	if b == other {
+		b.Clear()
+	} else {
+		for k := range other.All() {
+			b.Delete(k)
+		}
+	}
+}
+
+// Intersection returns a new set containing item that are in both sets.
+func (b *Set[K]) Intersection(other *Set[K]) *Set[K] {
+	if b == other {
+		return b.Clone()
+	}
+	b2 := NewSet[K]()
+	for k := range b.All() {
+		if other.Contains(k) {
+			b2.Insert(k)
+		}
+	}
+	return b2
+}
+
+// IntersectionWith removes any items from set that are not in other.
+func (b *Set[K]) IntersectionWith(other *Set[K]) {
+	if b == other {
+		return
+	}
+	for k := range b.Clone().All() {
+		if !other.Contains(k) {
+			b.Delete(k)
+		}
+	}
+}
+
+// Intersects returns true if other and s share any items.
+func (b *Set[K]) Intersects(other *Set[K]) bool {
+	if b == other {
+		return other.Len() > 0
+	}
+	if b.Len() >= other.Len() {
+		for k := range other.All() {
+			if b.Contains(k) {
+				return true
+			}
+		}
+		return false
+	}
+	return other.Intersects(b)
+}
+
+// SymmetricDifference returns a new set containing items that are in either,
+// but not both.
+func (b *Set[K]) SymmetricDifference(other *Set[K]) *Set[K] {
+	b2 := NewSet[K]()
+	if b == other {
+		return b2
+	}
+	for k := range b.All() {
+		if !other.Contains(k) {
+			b2.Insert(k)
+		}
+	}
+	for k := range other.All() {
+		if !b.Contains(k) {
+			b2.Insert(k)
+		}
+	}
+	return b2
+}
+
+// SymmetricDifferenceWith update set to the symmetric difference of both sets
+func (b *Set[K]) SymmetricDifferenceWith(other *Set[K]) {
+	if b == other {
+		b.Clear()
+	} else {
+		for k := range other.All() {
+			if b.Contains(k) {
+				b.Delete(k)
+			} else {
+				b.Insert(k)
+			}
+		}
+	}
 }
