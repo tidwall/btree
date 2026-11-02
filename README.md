@@ -4,7 +4,7 @@
 
 # btree
 
-[![GoDoc](https://godoc.org/github.com/tidwall/btree?status.svg)](https://godoc.org/github.com/tidwall/btree)
+[![GoDoc](https://godoc.org/github.com/tidwall/btree/v2?status.svg)](https://godoc.org/github.com/tidwall/btree/v2)
 
 An efficient [B-tree](https://en.wikipedia.org/wiki/B-tree) for Go.
 
