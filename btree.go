@@ -1706,6 +1706,10 @@ func (t *tree[K, V]) nodeDeleteRangeAt(n *node[K, V], offset, index, count int,
 		n.keys[n.len-1] = emptyKey
 		copy(n.values[i:], n.values[i+1:n.len])
 		n.values[n.len-1] = emptyValue
+		if n.branch.prefixes != nil {
+			copy(n.branch.prefixes[i:], n.branch.prefixes[i+1:n.len])
+			n.branch.prefixes[n.len-1] = 0
+		}
 		copy(n.branch.counts[i+1:], n.branch.counts[i+2:n.len+1])
 		n.branch.counts[n.len] = 0
 		copy(n.branch.children[i+1:], n.branch.children[i+2:n.len+1])
@@ -1723,6 +1727,9 @@ func (t *tree[K, V]) nodeDeleteRangeAt(n *node[K, V], offset, index, count int,
 		}
 		t.cowChild(n, i, true)
 		n.keys[i], n.values[i] = t.nodeDeleteMax(n.branch.children[i])
+		if n.branch.prefixes != nil {
+			n.branch.prefixes[i] = prefixString(n.keys[i])
+		}
 		// count--
 		n.branch.counts[i]--
 		if n.branch.children[i].len < minItems {
@@ -1748,6 +1755,10 @@ func (t *tree[K, V]) nodeDeleteRangeAt(n *node[K, V], offset, index, count int,
 		n.keys[n.len-1] = emptyKey
 		copy(n.values[i:], n.values[i+1:n.len])
 		n.values[n.len-1] = emptyValue
+		if n.branch.prefixes != nil {
+			copy(n.branch.prefixes[i:], n.branch.prefixes[i+1:n.len])
+			n.branch.prefixes[n.len-1] = 0
+		}
 		copy(n.branch.counts[i:], n.branch.counts[i+1:n.len+1])
 		n.branch.counts[n.len] = 0
 		copy(n.branch.children[i:], n.branch.children[i+1:n.len+1])
@@ -1774,6 +1785,10 @@ func (t *tree[K, V]) nodeDeleteRangeAt(n *node[K, V], offset, index, count int,
 		n.keys[n.len-1] = emptyKey
 		copy(n.values[i:], n.values[i+1:n.len])
 		n.values[n.len-1] = emptyValue
+		if n.branch.prefixes != nil {
+			copy(n.branch.prefixes[i:], n.branch.prefixes[i+1:n.len])
+			n.branch.prefixes[n.len-1] = 0
+		}
 		copy(n.branch.counts[i+1:], n.branch.counts[i+2:n.len+1])
 		n.branch.counts[n.len] = 0
 		copy(n.branch.children[i+1:], n.branch.children[i+2:n.len+1])

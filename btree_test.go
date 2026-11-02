@@ -37,6 +37,7 @@ func assert(cond bool) {
 		fmt.Fprintf(os.Stderr, "Assertion failed: %s, file %s, line %d.\n",
 			"("+strings.SplitN(strings.TrimSpace(strings.Split(string(data),
 				"\n")[ln-1]), "(", 2)[1], filepath.Base(path), ln)
+		panic("")
 		os.Exit(6)
 	}
 }
